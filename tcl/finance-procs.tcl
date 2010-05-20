@@ -87,11 +87,11 @@ ad_proc -private acc_fin::qaf_discount_npv_curve {
      } else {
          set discount_list [split $discounts " "]
      }
-
+     set npv_curve_list [list]
      foreach $i $discount_list {
-         lappend irr_curve_list [list $i [acc_fin::qaf_npv $net_period_list [list $i] $intervals_per_year ]]
+         lappend npv_curve_list [list $i [acc_fin::qaf_npv $net_period_list [list $i] $intervals_per_year ]]
      }
-     return $irr_curve_list
+     return $npv_curve_list
  }
 
 ad_proc -private acc_fin::qaf_irr { 
