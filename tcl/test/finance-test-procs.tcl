@@ -16,7 +16,7 @@ aa_register_case -cats {
         set cashflow3 [list 5000 2000]
         set finance_rate 0.10
         set reinvest_rate 0.12
-        set discount_rate 0.25482
+        set discount_rate 0.254969246263
         aa_equals "Checp PV" [acc_fin::pv $cashflow2 $finance_rate] "-4636.36363636"
         aa_equals "Check FV simple interest" [acc_fin::fvsimple $cashflow3 $reinvest_rate] "7600.0"
         aa_equals "Check NPV" [acc_fin::npv $cashflow1 $discount_rate] "0.000550114657813"

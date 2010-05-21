@@ -105,7 +105,6 @@ ad_proc -private acc_fin::qaf_irr {
      Hint: There can be more than one in complex cases.
      uses acc_fin::qaf_npv
  } {
-# proc acc_fin::qaf_irr { net_period_list {intervals_per_year 1} } {
      # let's get a sample from a practical range of discounts:
      #0., 0.01, 0.03, 0.07, 0.15, 0.31, 0.63, 1.27, 2.55, 5.11, 10.23, 20.47, 40.95, 81.91
     
@@ -124,7 +123,7 @@ ad_proc -private acc_fin::qaf_irr {
                  lappend start_range $prev_nbr
              }
          }
-         set prev_nbr $test_nbr     
+         set prev_nbr $test_nbr 
          incr test_nbr
      }
 
@@ -135,62 +134,99 @@ ad_proc -private acc_fin::qaf_irr {
 
          set count 0
          set i_end [expr { $i_begin + 1 } ]
-
  
-         # let's do our best first guess using linear interpolation
-         # first point
-         set test_discount $npv_test_discount($i_begin)
-         set test_npv $npv_test_value($i_begin)  
+         # we need two points to start the iteration
+
+         # first point, the left most range
+         set p0_discount $npv_test_discount($i_begin)
+         set p0_npv $npv_test_value($i_begin)  
          # first point analysis (for iteration)
-         set abs_test_npv [expr { abs( $test_npv ) } ]
-         set sign_test_npv [acc_fin::qaf_sign $test_npv]
+         set abs_p0_npv [expr { abs( $p0_npv ) } ]
+         set sign_p0_npv [acc_fin::qaf_sign $p0_npv]
 
-         # set interation at one tenth of dx to get a second point within the range
-         set discount_incr [expr { ( $npv_test_discount($i_end) - $test_discount ) / 10. } ]
+         # set interation at a fraction of dx to get a second point within the range
+         set discount_incr [expr { ( $npv_test_discount($i_end) - $p0_discount ) / 3. } ]
 
-         # arbitrary second point between first and last within range
-         set new_test_discount [expr { $test_discount + $discount_incr } ]
-         set new_test_npv [acc_fin::qaf_npv $net_period_list [list $new_test_discount] $intervals_per_year ]             
+         # second point is arbitrary between first and last within range
+         set p1_discount [expr { $p0_discount + $discount_incr } ]
+         set p1_npv [acc_fin::qaf_npv $net_period_list [list $p1_discount] $intervals_per_year ]             
+         set abs_p1_npv [expr { abs( $p1_npv ) } ]
 
-  
-         # best guess using available points and linear interpolation
-         # slope = dy / dx
-         set slope [expr { ( $new_test_npv - $test_npv ) / double( $new_test_discount - $test_discount ) } ]
-         # b = y intercept (x = 0), or approximate: substitute a point in b = y - mx
-         set yintercept [expr { $new_test_npv - ( $slope * $new_test_discount ) } ]
-         # x = (y - b ) / slope
-         set new_test_discount [expr { ( 0. - $yintercept ) / $slope } ]
-         set new_test_npv [acc_fin::qaf_npv $net_period_list [list $test_discount] $intervals_per_year ]             
+         set dx_discount [expr { abs( $p1_discount - $p0_discount ) } ] 
 
-
-puts "i_begin $i_begin, discount_incr $discount_incr, npv_test_discount(i_end) $npv_test_discount($i_end)"
-         # iterate test_discount
-
-         while { $count < 20 && $test_npv ne 0. } {
+         # iterate
+         while { $count < 20 && $abs_p1_npv > 1. && $dx_discount > 1.0e-09 } {
              incr count
 
+             # points are f(p0_discount), f(p1_discount)
 
-             # new point
-             set new_test_discount [expr { $test_discount + $discount_incr } ]
-             set new_test_npv [acc_fin::qaf_npv $net_period_list [list $test_discount] $intervals_per_year ]             
-             # analyse
-             set abs_new_test_npv [expr { abs( $new_test_npv ) } ]
-             set sign_new_test_npv [acc_fin::qaf_sign $new_test_npv]
-             set sign_change [expr { -1 * $sign_test_npv * $sign_new_test_npv } ]
+             # analyse new point 
+             set sign_p1_npv [acc_fin::qaf_sign $p1_npv]
+             set sign_change [expr { $sign_p0_npv * $sign_p1_npv } ]
+
              # is new point getting closer or did we pass NPV=0?
-             if { $abs_test_npv < $abs_new_test_npv || $sign_change eq 1. } {
-                 # if not, switch direction, and lower increment on next iteration
+             if { ( $abs_p0_npv < $abs_p1_npv ) || ( $sign_change < 1 ) } {
+                 # if passed NPV=0, switch direction and lower increment on next iteration
                  set discount_incr [expr ( $discount_incr * -0.5 ) ]
              } 
 
-             set test_discount $new_test_discount
-             set test_npv $new_test_npv
-             set sign_test_npv $sign_new_test_npv
-puts "count $count, test_npv $test_npv, test_discount $test_discount, sign_change $sign_change, discount_incr $discount_incr" 
+             # make 2 guesses, choose closer one.
+             # guess0 using iterative method
+
+             set guess0_discount [expr { $p1_discount + $discount_incr } ]
+             set guess0_npv [acc_fin::qaf_npv $net_period_list [list $guess0_discount] $intervals_per_year ]             
+             set abs_guess0_npv [expr { abs( $guess0_npv ) } ]
+
+             # best guess using linear interpolation between points  f(guess0_discount) and f(p1_discount)
+             # slope = dy / dx
+             set slope [expr { ( $guess0_npv - $p1_npv ) / double( $guess0_discount - $p1_discount ) } ]
+             set try_guess1 [expr { $slope != 0 } ]
+             if { $try_guess1 } { 
+                 # line not vertical
+                 # b = y intercept (x = 0), or approximate: substitute a point in b = y - mx
+                 set yintercept [expr { $guess0_npv - ( $slope * $guess0_discount ) } ]
+                 # x = (y - b ) / slope
+                 set guess1_discount [expr { ( 0. - $yintercept ) / double($slope) } ]
+                 set guess1_npv [acc_fin::qaf_npv $net_period_list [list $guess1_discount] $intervals_per_year ]             
+                 set abs_guess1_npv [expr { abs( $guess1_npv ) } ]
+             }
+
+             # save old point
+             set p0_discount $p1_discount
+             set p0_npv $p1_npv
+             set sign_p0_npv $sign_p1_npv
+             set abs_p0_npv $abs_p1_npv
+
+             # choose the closest new point, if there is a choice
+             if { ( $try_guess1 && $abs_guess1_npv < $abs_guess0_npv ) } {
+
+                 set p1_discount $guess1_discount
+                 set p1_npv $guess1_npv
+                 set abs_p1_npv $abs_guess1_npv
+                 # choose minimum nonzero dx
+                 set guess1_dx [expr { $guess1_discount - $p0_discount} ]
+                 set guess0_dx [expr { $guess0_discount - $p0_discount } ]
+                 set abs_guess1_dx [expr { abs($guess1_dx) } ]
+                 set abs_guess0_dx [expr { abs($guess0_dx) } ]
+
+                 if { $abs_guess1_dx > 0. && $abs_guess0_dx > 0. } {
+                     # set discount_incr smaller of either (f::min) expr {$x<$y ? $x : $y}                 
+                     set discount_incr [expr { $abs_guess1_dx < $abs_guess0_dx ? $guess1_dx : $guess0_dx } ]
+                 } else {
+                     # set discount_incr to larger of either (f::min) expr {$x<$y ? $x : $y}
+                     set discount_incr [expr { $abs_guess1_dx > $abs_guess0_dx ? $guess1_dx : $guess0_dx } ]
+                 }
+             } else {
+                 set p1_discount $guess0_discount
+                 set p1_npv $guess0_npv
+                 set abs_p1_npv $abs_guess0_npv
+             }
+
+             set dx_discount [expr { abs( $p1_discount - $p0_discount ) }  ]
         }
  
-         if { $test_npv eq 0 } {
-             lappend irr_list $test_discount
+         if { $abs_p1_npv < 1. } {
+             lappend irr_list $p1_discount
          }
      }
      return $irr_list
