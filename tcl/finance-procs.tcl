@@ -10,7 +10,7 @@ namespace eval acc_fin {}
 
 ad_proc -private acc_fin::qaf_npv { 
     net_period_list 
-    discount_rates_list
+    discount_rates
     {intervals_per_year 1}
  } {
      Returns the Net Present Value
@@ -24,10 +24,10 @@ ad_proc -private acc_fin::qaf_npv {
 
      # make lists same length to decrease loop calc time
      # convert discount_rates to a list, in case it was supplied as a scalar
-     if { [llength $discount_rates_list] > 1 } {
-         set discount_rate_list $discount_rates_list
+     if { [llength $discount_rates] > 1 } {
+         set discount_rate_list $discount_rates
      } else {
-         set discount_rate_list [split $discount_rates_list]
+         set discount_rate_list [split $discount_rates]
      }
      set last_supplied_rate [lindex $discount_rate_list end]
      set discount_list_count [llength $discount_rate_list]
@@ -257,4 +257,79 @@ ad_proc -private acc_fin::qaf_mirr {
      set fv [acc_fin::qaf_fvsimple $positive_cf_list $re_invest_rate $intervals_per_year]
      set mirr [expr { pow( ( -1. * $fv ) / double( $pv ), 1. / ( double( $period_count ) -1. ) ) - 1. } ]
      return $mirr
+ }
+
+ad_proc -private acc_fin::qaf_loan_payment { 
+    principal
+    annual_interest_rate
+    intervals_per_year
+    years
+ } {
+    Returns regular payment for loan.
+    Interest is compounded per interval (period). Assumes payment is made at end of interval.
+ } {
+     # interval interest rate
+     set interval_rate [expr { $annual_interest_rate / double($intervals_per_year) } ]
+     set regular_payment [expr { ( $principal * $interval_rate ) / ( 1. - exp( -1. * $intervals_per_year * $years * log( 1. + $interval_rate ) ) ) ) } ]
+     return $regular_payment
+ }
+
+ad_proc -private acc_fin::qaf_loan_apr { 
+    annual_interest_rate
+    intervals_per_year
+ } {
+    Returns regular payment for loan.
+    Interest is compounded per interval (period).
+ } {
+     set apr [expr {  pow( 1. + $annual_interest_rate / double($intervals_per_year) , $intervals_per_year ) - 1. } ]
+
+     return $apr
+ }
+
+ad_proc -private acc_fin::qaf_compound_interest { 
+    principal
+    annual_interest_rate
+    intervals_per_year
+    years
+ } {
+    Returns principal and compounded interest 
+    Interest is compounded per interval (period). 
+ } {
+     set principal_and_interest [expr { $principal * pow( 1. + $annual_interest_rate / double($intervals_per_year) , double ($intervals_per_year * $years ) ) } ]
+     return $principal_and_interest
+ }
+
+ad_proc -private acc_fin::qaf_loan_model { 
+    principal
+    annual_interest_rate
+    intervals_per_year
+    years
+    {payments ""}
+    {query_period "summary"}
+ } {
+    Provides table of common loan data for complex modeling.
+    Interest is compounded per interval (period). 
+    If a list of payments are supplied, they are applied in order with first payment at end of period 1. Second payment at end of period 2 etc. and final payment is repeated until loan is paid in full or number of loan years is complete.
+    If no payments are supplied, a constant payment is calculated and assumed.
+     Returns elements of query in list pairs of period number provided. Period 0 is before loan begins. Use "summary" to return summary accumulations. "all" to return all data as list of lists. 
+ } {
+     if { $payments eq "" } {
+         set payments [acc_fin::qaf_loan_payment $principal $annual_interest_rate $intervals_per_year $years]
+     }
+     # convert payments to a list, in case it was supplied as a scalar
+     if { [llength $payments] > 1 } {
+         set payment_list $payments
+     } else {
+         set payment_list [split $payments]
+     } 
+     set last_supplied_pmt [lindex $payments_list end]
+     set payments_list_count [llength $payments_list]
+     set periods_count [expr { ( intervals_per_year * years ) } ]
+     while { $payments_list_count < $periods_count } {
+         lappend payments_list $last_supplied_pmt
+         incr payments_list_count
+     }
+
+
+     return $query_report_list
  }
