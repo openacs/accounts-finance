@@ -233,15 +233,17 @@ ad_proc -private acc_fin::qaf_irr {
  }
 
 ad_proc -private acc_fin::qaf_mirr { 
-    net_period_list 
+    period_cf_list 
     finance_rate
     re_invest_rate
     {intervals_per_year 1}
  } {
      Returns a Modified Internal Rate of Return
  } {
+     # see http://en.wikipedia.org/wiki/Modified_internal_rate_of_return
      # create separate positive and negative cashflows from list
-     set period_count [llength $net_period_list]
+
+     set period_count [llength $period_cf_list]
      foreach period_cf $period_cf_list {
          if { $period_cf > 0 } {
              lappend positive_cf_list $period_cf
@@ -253,6 +255,6 @@ ad_proc -private acc_fin::qaf_mirr {
      }
      set pv [acc_fin::qaf_npv $negative_cf_list [list $finance_rate] $intervals_per_year]
      set fv [acc_fin::qaf_fvsimple $positive_cf_list $re_invest_rate $intervals_per_year]
-     set mirr [expr { pow( -1. * $fv / double( $pv ), 1. / double( $period_count ) ) - 1. } ]
+     set mirr [expr { pow( ( -1. * $fv ) / double( $pv ), 1. / ( double( $period_count ) -1. ) ) - 1. } ]
      return $mirr
  }

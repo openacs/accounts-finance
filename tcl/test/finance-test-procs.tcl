@@ -21,6 +21,6 @@ aa_register_case -cats {
         aa_equals "Check FV simple interest" [acc_fin::fvsimple $cashflow3 $reinvest_rate] "7600.0"
         aa_equals "Check NPV" [acc_fin::npv $cashflow1 $discount_rate] "0.000550114657813"
         aa_equals "Check IRR" [acc_fin::irr $cashflow1] $discount_rate
-        aa_equals "Check MIRR" [acc_fin::mirr $cashflow1 $finance_rate $reinvest_rate] "0.1791"
+        aa_equals "Check MIRR" [acc_fin::mirr $cashflow1 $finance_rate $reinvest_rate] "0.179085686035"
     }
 }
