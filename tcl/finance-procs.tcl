@@ -341,8 +341,9 @@ ad_proc -private acc_fin::qaf_loan_model {
      set interest 0.
      set payment 0.
      set balance $principal
+     set payoff $principal
 
-     while { $balance > 0. && $period <= $end_period && $period <= $payments_list_count } {
+     while { $payoff > 0. && $period <= $end_period && $period <= $payments_list_count } {
 
          if { $payment > $interest } {
              set payment_principal [expr { $payment - $interest } ]
