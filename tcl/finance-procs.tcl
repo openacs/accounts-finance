@@ -309,9 +309,9 @@ ad_proc -private acc_fin::qaf_loan_model {
  } {
     Provides table of common loan data for complex modeling.
     Interest is compounded per interval (period). 
-    If a list of payments are supplied, they are applied in order with first payment at end of period 1. Second payment at end of period 2 etc. and final payment is repeated until loan is paid in full or number of loan years is complete.
+    If a list of payments are supplied, they are applied in order with first payment at end of period 1. Second payment at end of period 2 etc. and final payment is repeated until loan is paid in full or number of loan years is complete. If the last payment is zero, the balance remaining is reported as a baloon payment.
     If no payments are supplied, a constant payment is calculated and assumed.
-     Returns elements of query in list pairs of period number provided. Period 0 is before loan begins. Use "summary" to return summary accumulations. "all" to return all data as list of lists. 
+     Returns elements of query in list pairs of period number provided. Period 0 is before loan begins. Use "summary" to return summary accumulations. "all" to return all data as ordered list of lists; first list containing data names. 
  } {
      if { $payments eq "" } {
          set payments [acc_fin::qaf_loan_payment $principal $annual_interest_rate $intervals_per_year $years]
@@ -325,11 +325,62 @@ ad_proc -private acc_fin::qaf_loan_model {
      set last_supplied_pmt [lindex $payments_list end]
      set payments_list_count [llength $payments_list]
      set periods_count [expr { ( intervals_per_year * years ) } ]
-     while { $payments_list_count < $periods_count } {
+     while { $payments_list_count < $periods_count && $last_supplied_pmt > 0. } {
          lappend payments_list $last_supplied_pmt
          incr payments_list_count
      }
+     if { $query_period eq "all" } {
+         set query_report_list [list period year interest payment payment_principal payments_accumulated paid_interest_accumulated paid_principal_accumulated balance payoff]
+     } else {
+         set query_report_list [list]
+     }
+     # set up
+     set period 0
+     set year 0
+     set end_period $periods_count
+     set interest 0.
+     set payment 0.
+     set balance $principal
 
+     while { $balance > 0. && $period <= $end_period && $period <= $payments_list_count } {
+
+         if { $payment > $interest } {
+             set payment_principal [expr { $payment - $interest } ]
+             set interest_accumulated [expr { $interest_accumulated + $interest } ]
+             set new_interest 0.
+         } else {
+             # principal_accumulated does not change
+             set payment_principal 0.
+             # interest paid may be a fraction of the interest compounded for this period
+             set interest_accumulated [expr { $interest_accumulated + $payment } ]
+#             set new_interest  $interest - $payment 
+         }
+         set principal_accumulated [expr { $principal_accumulated + $payment_principal } ]
+         set payments_accumulated [expr { $payments_accumulated + $payment } ]
+
+         set balance [expr { $balance + interest - $payment } ]
+
+         # report
+         if { $query_period eq $period } {
+             lappend query_report_list [list period $period year $year interest $interest payment $payment payment_principal $payment_principal payments_accumulated $payments_accumulated paid_interest_accumulated $interest_accumulated paid_principal_accumulated $principal_accumulated balance $balance payoff $payoff]
+         } elseif { $query_period eq "all" } {
+             lappend query_report_list [list $period $year $interest $payment $payment_principal $payments_accumulated $interest_accumulated $principal_accumulated $balance $payoff]
+         }
+
+         # new period
+         # interest applied
+         set payment [lindex $payment_list $period]
+         incr period
+         set interest [expr { $balance * $annual_interest_rate / double($intervals_per_year) } ]
+         set payoff [expr { $balance + $interest } ]
+
+         if { $payment > $payoff } {
+             set $payment $payoff
+         }
+     }
+     if { $query_period eq "summary" } {
+         lappend query_report_list [list period $period year $year interest $interest payment $payment payment_principal $payment_principal payments_accumulated $payments_accumulated paid_interest_accumulated $interest_accumulated paid_principal_accumulated $principal_accumulated balance $balance payoff $payoff]
+     }
 
      return $query_report_list
  }
