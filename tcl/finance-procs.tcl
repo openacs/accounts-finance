@@ -270,7 +270,7 @@ ad_proc -private acc_fin::qaf_loan_payment {
  } {
      # interval interest rate
      set interval_rate [expr { $annual_interest_rate / double($intervals_per_year) } ]
-     set regular_payment [expr { ( $principal * $interval_rate ) / ( 1. - exp( -1. * $intervals_per_year * $years * log( 1. + $interval_rate ) ) ) ) } ]
+     set regular_payment [expr { ( $principal * $interval_rate ) / ( 1. - exp( -1. * $intervals_per_year * $years * log( 1. + $interval_rate ) ) ) } ]
      return $regular_payment
  }
 
@@ -314,17 +314,18 @@ ad_proc -private acc_fin::qaf_loan_model {
      Returns elements of query in list pairs of period number provided. Period 0 is before loan begins. Use "summary" to return summary accumulations. "all" to return all data as ordered list of lists; first list containing data names. 
  } {
      if { $payments eq "" } {
-         set payments [acc_fin::qaf_loan_payment $principal $annual_interest_rate $intervals_per_year $years]
+         set payment [acc_fin::qaf_loan_payment $principal $annual_interest_rate $intervals_per_year $years]
+         set payments [list $payment $payment]
      }
      # convert payments to a list, in case it was supplied as a scalar
      if { [llength $payments] > 1 } {
-         set payment_list $payments
+         set payments_list $payments
      } else {
-         set payment_list [split $payments]
+         set payments_list [split $payments]
      } 
      set last_supplied_pmt [lindex $payments_list end]
      set payments_list_count [llength $payments_list]
-     set periods_count [expr { ( intervals_per_year * years ) } ]
+     set periods_count [expr { ( $intervals_per_year * $years ) } ]
      while { $payments_list_count < $periods_count && $last_supplied_pmt > 0. } {
          lappend payments_list $last_supplied_pmt
          incr payments_list_count
@@ -342,6 +343,9 @@ ad_proc -private acc_fin::qaf_loan_model {
      set payment 0.
      set balance $principal
      set payoff $principal
+     set interest_accumulated $interest
+     set principal_accumulated $payment
+     set payments_accumulated $payment
 
      while { $payoff > 0. && $period <= $end_period && $period <= $payments_list_count } {
 
@@ -359,7 +363,7 @@ ad_proc -private acc_fin::qaf_loan_model {
          set principal_accumulated [expr { $principal_accumulated + $payment_principal } ]
          set payments_accumulated [expr { $payments_accumulated + $payment } ]
 
-         set balance [expr { $balance + interest - $payment } ]
+         set balance [expr { $balance + $interest - $payment } ]
 
          # report
          if { $query_period eq $period } {
@@ -370,13 +374,14 @@ ad_proc -private acc_fin::qaf_loan_model {
 
          # new period
          # interest applied
-         set payment [lindex $payment_list $period]
+         set payment [lindex $payments_list $period]
          incr period
+         set year [expr { int( $period / $intervals_per_year ) } ]
          set interest [expr { $balance * $annual_interest_rate / double($intervals_per_year) } ]
          set payoff [expr { $balance + $interest } ]
 
          if { $payment > $payoff } {
-             set $payment $payoff
+             set payment $payoff
          }
      }
      if { $query_period eq "summary" } {
@@ -385,3 +390,127 @@ ad_proc -private acc_fin::qaf_loan_model {
 
      return $query_report_list
  }
+
+ad_proc -private acc_fin::qaf_depreciation_schedule { 
+    depreciation_type
+    original_cost
+    {scrap_value ""}
+    {depreciation_rate ""}
+    {units_of_activity ""}
+    {units_done ""}
+} {
+    Returns list of depreciation expenses
+    see: http://en.wikipedia.org/wiki/Depreciation
+    depreciation_type must be one of (number or name works)
+      1,straight-line, 
+      2,declining-balance,
+      3,sum-of-years-digits,
+      4,units-of-production,
+      5,macrs-modified-bonus
+    original cost = cost of fixed asset
+    scrap value = residual value
+    units of activity = life of asset, service etc (number of years, total units expected produced in duration of tool life, expected total milleage of a vehicle's life etc)
+    units done = number of units produced, amount of miles driven etc.
+    The various depreciations are referenced from one function so that multiple depreciation scenarios can be easily referenced within model variations.
+} {
+# proc acc_fin::qaf_depreciation_schedule {     depreciation_type original_cost {scrap_value ""} {depreciation_rate ""} {units_of_activity ""} {units_done ""} } {
+    set depreciation_list [list]
+    # convert units_done and depreciation_rate to lists, if they are supplied that way
+    if { [llength $units_done] > 1 } {
+        set units_done_list $units_done
+    } else {
+        set units_done_list [split $units_done " "]
+    }
+    if { [llength $depreciation_rate] > 1 } {
+        set depreciation_rate_list $depreciation_rate
+    } else {
+        set depreciation_rate_list [split $depreciation_rate " "]
+    }
+
+    switch -exact -- $depreciation_type {
+        
+        1 -
+        straight-line { 
+            if { $original_cost > 0 && $scrap_value >= 0 && $units_of_activity > 0 } {
+                set expense [expr { ( $original_cost - $scrap_value ) / double($units_of_activity) } ]
+                for { set unit 0 } { $unit < $units_of_activity } { incr unit 1 } {
+                    lappend depreciation_list $expense
+                }
+            } elseif { $depreciation_rate > 0 } {
+                set expense [expr { ( $original_cost * $depreciaton_rate ) } ]
+                for { set unit 0 } { $unit < $units_of_activity } { incr unit 1 } {
+                    lappend depreciation_list $expense
+                }
+            } else {
+                lappend depreciation_list "ERROR"
+            }
+        }
+        2 -
+        declining-balance {
+            if { $depreciation_rate >= 0 && $original_cost >= 0 && $scrap_value >= 0 && $units_of_activity > 0 } {
+                set book_value $original_cost
+                while { $book_value > $scrap_value } {
+                    set expense1 [expr { $depreciation_rate * $book_value } ]
+                    set expense2 [expr { $book_value - $scrap_value } ]
+                    set expense [expr { $expense1 < $expense2 ? $expense1 : $expense2 } ]
+                    set book_value [expr { $book_value - $expense } ]
+                    lappend depreciation_list $expense
+                }
+            } else {
+                lappend depreciation_list "ERROR"
+            }
+        }
+        3 -
+        sum-of-years-digits { 
+            if { $original_cost > 0 && $scrap_value >= 0 && $units_of_activity > 0 } {
+                set sum_of_digits [expr { int ( ( pow($units_of_activity, 2.) + $units_of_activity ) / double ( 2.0) ) } ]
+                set depreciable_cost_factor [expr ( $original_cost - $scrap_value ) / double($sum_of_digits) ]
+                for { set unit 0 } { $unit < $units_of_activity } { incr unit 1 } {
+                    set expense [expr {  $depreciable_cost_factor * ( $units_of_activity - $unit ) } ]
+                    lappend depreciation_list $expense
+                }
+            } else {
+                lappend depreciation_list "ERROR"
+            }
+        }
+        4 -
+        units-of-production { 
+            if { $original_cost > 0 && $scrap_value >= 0 && $units_of_activity > 0 && $units_done >= 0 } {
+                set depreciation_per_unit [expr { ( $original_cost - $scrap_value ) / double($units_of_activity) } ]
+                set expenses_accumulated 0
+                set units_total 0
+                foreach units_count $units_done_list {
+                    set new_units_total [expr { $units_count + $units_total } ]
+                    if { $new_units_total <= $units_of_activity } {
+                        set expense [expr { $depreciation_per_unit * $units_count } ]
+                        lappend depreciation_list $expense
+                    } else {
+                        set units_count [expr { $units_count - ( $new_units_total - $units_of_activity) } ]
+                        set expense [expr { $depreciation_per_unit * $units_count } ]
+                        lappend depreciation_list $expense
+                    }
+                }
+            } else {
+                lappend depreciation_list "ERROR"
+            }
+        }
+        5 -
+        macrs-modified-bonus {
+            if { $scrap_value eq "" } {
+                set scrap_value 0
+            }
+            if { [llength $depreciation_rate_list] > 0 && $original_cost > 0 } {
+                foreach depr_rate $depreciation_rate_list {
+                    set expense [expr { $depr_rate * ( $original_cost - $scrap_value ) } ]
+                    lappend depreciation_list $expense
+                }
+            }
+        }
+            
+        -- {
+            lappend depreciation_list "ERROR undefined depreciation_type"
+        } 
+
+        return $depreciation_list
+    }
+}
