@@ -118,7 +118,7 @@ ad_proc -private acc_fin::qaf_irr {
          set npv_test_value($test_nbr) [acc_fin::qaf_npv $net_period_list [list $i] $intervals_per_year ]
 
          if { $test_nbr > 1 } {
-             if { [expr {  [acc_fin::qaf_sign $npv_test_value($test_nbr)] * [acc_fin::qaf_sign $npv_test_value($prev_nbr)] } ] < 0 } {
+             if { [expr {  [qaf_sign $npv_test_value($test_nbr)] * [qaf_sign $npv_test_value($prev_nbr)] } ] < 0 } {
                  incr sign_change_count
                  lappend start_range $prev_nbr
              }
@@ -142,7 +142,7 @@ ad_proc -private acc_fin::qaf_irr {
          set p0_npv $npv_test_value($i_begin)  
          # first point analysis (for iteration)
          set abs_p0_npv [expr { abs( $p0_npv ) } ]
-         set sign_p0_npv [acc_fin::qaf_sign $p0_npv]
+         set sign_p0_npv [qaf_sign $p0_npv]
 
          # set interation at a fraction of dx to get a second point within the range
          set discount_incr [expr { ( $npv_test_discount($i_end) - $p0_discount ) / 3. } ]
@@ -161,7 +161,7 @@ ad_proc -private acc_fin::qaf_irr {
              # points are f(p0_discount), f(p1_discount)
 
              # analyse new point 
-             set sign_p1_npv [acc_fin::qaf_sign $p1_npv]
+             set sign_p1_npv [qaf_sign $p1_npv]
              set sign_change [expr { $sign_p0_npv * $sign_p1_npv } ]
 
              # is new point getting closer or did we pass NPV=0?
@@ -514,3 +514,4 @@ ad_proc -private acc_fin::qaf_depreciation_schedule {
         return $depreciation_list
     }
 }
+
