@@ -243,6 +243,9 @@ gl_type choices are:
     "service" for service based GL
 } {
     upvar $array_name gl
+    upvar ${array_name}_title gl_title
+    upvar ${array_name}_element gl_element
+    upvar ${array_name}_nature gl_nature
     # a predefined list of accounts. account number is acc_ref 
     # gl_sorted(sort_key) account number. This allows quick iterating in sorted order.
     # 
@@ -251,14 +254,83 @@ gl_type choices are:
     # gl_nature(acc_ref) for type, example: real,entity,nominal; see http://en.wikipedia.org/wiki/Double-entry_bookkeeping_system
     switch -exact -- $gl_type {
         capbug {
+            array set gl_title {
 1000 "ASSETS"
+1010 "Cash"
+1020 "Inventories"
+1030 "Accounts Receivables"
+1040 "Prepaid expenses"
+1050 "Property, plan and equipment"
+1060 "Real estate"
+1070 "Intangible assets"
+1080 "other financial assets"
+1090 "equity investments"
+1100 "biological assets (living)"
 2000 "LIABILITIES"
+2010 "Accounts payables"
+2020 "Provisions for warranties etc"
+2030 "other liabilities"
+2040 "current taxes"
+2050 "deferred taxes"
 3000 "EQUITY"
-4000 "REVENUES"
-5000 "COGS"
-6000 "EXPENSES"
-7000 other
+3010 "shares"
+3020 "capital reserves"
+3030 "retained earnings"
+4000 "Capital Gains / Losses"
+4010 "gains"
+4020 "losses"
+5000 "REVENUES"
+5010 "sales"
+5020 "rent"
+5030 "service"
+5040 "other revenue"
+6000 "COGS"
+6010 "inventory"
+6020 "freight"
+6100 "EXPENSES"
+6110 "Operating costs, land use"
+6120 "Operating costs, direct labor, fixed"
+6130 "Operating costs, direct labor, variable"
+6140 "Royalties, commissions"
+6150 "Rents"
+6160 "Cost of debt + equity interest"
+6170 "other expenses"
+6200 "Advertising"
+6210 "Banking fees"
+6220 "Professional services"
+6230 "Licenses"
+6240 "Telephone"
+6250 "Utilities"
+6500 "Taxes"
+7000 "other tracking"
+7010 "EBITDA"
+            }
+    array set element_arr {
+1 asset
+2 liability
+3 capital
+4 gains
+5 income
+6 expense
+7 report
+    }
+    array set nature_arr {
+1 real
+2 personal
+3 real
+4 nominal
+5 nominal
+6 nominal
+7 nominal
+    }
+    foreach account [array names gl_title] {
+        set element [string index $account 0]
+        set gl_element($account) $element_arr($element)
+        set gl_nature($account) $nature_arr($element)
+        set gl_sorted($account) $account
+    }
 
+}
         }
 
         general {
