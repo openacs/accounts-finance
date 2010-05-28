@@ -35,6 +35,17 @@ ad_proc -public qaf_sign {
     return $sign
 }
 
+ad_proc -public acc_fin::inflation_factor {
+    annual_inflation_rate
+    intervals_per_year
+    year
+} {
+    Returns the factor to apply to a value to adjust for inflation.
+    Assumes inflationary factors occur once per year at end of year.
+} {
+    set inflationary_factor [expr { pow ( 1. + $annual_inflation_rate / double($intervals_per_year) , $year - 1. ) } ]
+}
+
 ad_proc -private acc_fin::template_model { 
     template_number
 } {
@@ -621,6 +632,20 @@ ad_proc -private acc_fin::gl_tx {
 }
 
 
-# create proc gl_tx that accepts pairs of account debit/credit, where debits = credits
-# create procs to mimmic AR/Transaction, AP/transaction, and other common transactions to reduce model complexity.
+
+# create procs for?
+# AR/
+# AR/sale  1000 x, 1200 -x, 1200 x, 4000 x
+# AP/vendor payment cash  1000 -x ,2100 x, 2100 -x, 5000 x
+# ..let's wait until we know if this is necessary. gl_tx seems adequate for now.
+
+# system energy output 
+# revenue from energy output
+
+# create procs to maintain a debt via interation (add interest, add payment, adjust balance for each)
+# monitor for payback period during iteration
+# 
 # create proce that shows balance sheet etc for any period or difference between two or more periods
+# proc profitability_index (PV of future cashflows over project life / initial investment)
+
+
