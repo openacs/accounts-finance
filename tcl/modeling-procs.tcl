@@ -31,7 +31,11 @@ ad_proc -public qaf_sign {
 } {
     Returns the sign of the number represented as -1, 0, or 1
 } {
-    set sign [expr { $number / double( abs ( $number ) ) } ]
+    if { $number == 0 } {
+        set sign 0
+    } else {
+        set sign [expr { round( $number / double( abs ( $number ) ) ) } ]
+    }
     return $sign
 }
 
