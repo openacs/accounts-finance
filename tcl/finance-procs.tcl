@@ -413,7 +413,6 @@ ad_proc -private acc_fin::qaf_depreciation_schedule {
     units done = number of units produced, amount of miles driven etc.
     The various depreciations are referenced from one function so that multiple depreciation scenarios can be easily referenced within model variations.
 } {
-# proc acc_fin::qaf_depreciation_schedule {     depreciation_type original_cost {scrap_value ""} {depreciation_rate ""} {units_of_activity ""} {units_done ""} } {
     set depreciation_list [list]
     # convert units_done and depreciation_rate to lists, if they are supplied that way
     if { [llength $units_done] > 1 } {

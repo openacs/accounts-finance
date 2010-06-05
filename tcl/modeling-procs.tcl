@@ -590,8 +590,6 @@ mfg {
   }
 }
 
-}
-
 
 ad_proc -private acc_fin::gl_tx_balanced {
     transaction_list 
@@ -636,12 +634,6 @@ ad_proc -private acc_fin::gl_tx {
 }
 
 
-
-# create procs for?
-# AR/
-# AR/sale  1000 x, 1200 -x, 1200 x, 4000 x
-# AP/vendor payment cash  1000 -x ,2100 x, 2100 -x, 5000 x
-# ..let's wait until we know if this is necessary. gl_tx seems adequate for now.
 
 # system energy output 
 # revenue from energy output
