@@ -61,10 +61,10 @@ ad_proc -private acc_fin::template_model {
 period = 0
 periods_per_year = 12
 total_periods = 20
-#
+\#
 period = i
 year = int( ( period + ( periods_per_year - 1 ) / periods_per_year ) )
-#
+\#
 i period year periods_per_year total_periods
 "
 
@@ -73,178 +73,244 @@ i period year periods_per_year total_periods
     return $template
 }
 
-ad_proc -private acc_fin::model_compile { 
+ad_proc -private acc_fin::model_compute { 
     model 
+    {number_of_iterations "0"}
+    {arg1 ""}
+    {arg2 ""}
+    {arg3 ""}
 } {
-     returns calculation friendly list of lists from model represented in shorthand
-    shorthand consists of these parts:
-section 1: initial calculations and conditions
-section 2: repeating calculations (in order calculated)
-section 3: list of variables to report with iterations
-section 4: analysis calculations
-  Each section is separated by a line with '\#'. Be sure to separate variables and operators etc by a space (or more). 
-reserved variables:
-  i current iteration number, initial conditions are at iteraton 0, whole numbers
-  h is i - 1
-  timestamp(i) is timestamp associated with period in seconds from system epoch
-  dt is duration of a period between timestamp(1) - timestamp(0) in seconds
+    Loop through model N (number) iterations, 0 iterations means pre-compile only (and check model for immediate errors).
+    arg1, arg2, arg3 are passed to the model, a feature for adding variances to model computations, such as interval_duration and parameter ranges
+    shorthand consists of these parts (with examples):
+    section 1: initial calculations and conditions
+     x = number
+     y = number
+    if this section begins with default = value, then all undeclared variables will automatically start with that value. 
 
+    section 2: repeating calculations (in order calculated)
+
+        y = i * 2 + 1
+        z = pow( i , h ) * z
+        for the above, the z refers automatically to the value from the previous iteration for consistency.
+    section 3: list of variables to report with iterations
+        z y
+    section 4: analysis calculations
+       irr $y
+    Each section is separated by a line with '\#'. Be sure to separate variables and operators etc by a space (or more). 
+    reserved variables:
+    i current iteration number, initial conditions are at iteraton 0, whole numbers
+    h is i - 1
+    timestamp(i) is timestamp associated with end of period in seconds from system epoch
+    dt(i) is duration of a period between timestamp(i) - timestamp(h) in seconds
 } {
-  # split model by '#' into these parts:
-  # 1. initial calculations and conditions (including number of iterations)
-  # 2. repeating calculations
-  # 3. items to report for each Nth iteration ( starting with iteration number M?)
-  # 4. analysis calculations to report at end of iterations
 
-  # then split each section into "lines" by CR
-
+    # COMPILE model before executing. Do not bypass this as it includes security checks.
+    #  calculates friendly list of lists from model represented in shorthand
+    
+    # we are combining the compile,compute and report functions to one function so that name space isn't confusing or buggy.
+    ns_log Notice "acc_fin::model_compute compile starting"
+    # split model by '#' into these parts:
+    # 1. initial calculations and conditions (including number of iterations)
+    # 2. repeating calculations
+    # 3. items to report for each Nth iteration ( starting with iteration number M?)
+    # 4. analysis calculations to report at end of iterations
+    
+    # then split each section into "lines" by CR
+    
     # then split calculations by "=" (and add set,\[expr \])
-    # use ns_write or ad_page_append? for report iterations
+    # output data as list of lists
 
-  # for security, compiler should not allow square brackets, exec, source, or proc
-    set err_state 0
-    set err_text 0
+    # for security, compiler should not allow square brackets, exec, source, or proc
+    set _err_state 0
+    set _err_text 0
     if { [regexp -nocase -- {[^a-z0-9_]exec[^a-z0-9_]} ] } {
-        incr err_state
-        append err_text "Error: 'exec' is not permitted in model definition. \n"
+        incr _err_state
+        append _err_text "Error: 'exec' is not permitted in model definition. \n"
+    }
+    if { [regexp -nocase -- {[^a-z0-9_]upvar[^a-z0-9_]} ] } {
+        incr _err_state
+        append _err_text "Error: 'upvar' is not permitted in model definition. \n"
+    }
+    if { [regexp -nocase -- {[^a-z0-9_]uplevel[^a-z0-9_]} ] } {
+        incr _err_state
+        append _err_text "Error: 'uplevel' is not permitted in model definition. \n"
     }
     if { [regexp -nocase -- {[^a-z0-9_]proc[^a-z0-9_]} ] } {
-        incr err_state 
-        append err_text "Error: 'proc' is not permitted in model definition. \n"
+        incr _err_state 
+        append _err_text "Error: 'proc' is not permitted in model definition. \n"
     }
     if { [regexp -nocase -- {[^a-z0-9_]source[^a-z0-9_]} ] } {
-        incr err_state 
-        append err_text "Error: 'source' is not permitted in model definition. \n"
+        incr _err_state 
+        append _err_text "Error: 'source' is not permitted in model definition. \n"
     }
     if { [regexp -nocase -- {[\]\[]} ] } {
-        incr err_state 
-        append err_text "Error: 'square brackets' are not permitted in model definition. \n"
+        incr _err_state 
+        append _err_text "Error: 'square brackets' are not permitted in model definition. \n"
     }
 
-    if { $err_state 0 } {
-        set section_count 0
-        set model_sections_list [split $model \#]
-        set new_model_sections_list [list]
-        foreach model_section $model_sections_list {
-            incr section_count
+    if { $_err_state 0 } {
+        # convert all internal variables to _variable_name to not get confused with model variables
+        set _model $model
+        set _number_of_iterations $number_of_iterations
+        set _arguments [list $arg1 $arg2 $arg3]
+        unset -nocomplain -- model number_of_iterations arg1 arg2 arg3
+
+        set _section_count 0
+        set _model_sections_list [split $_model \#]
+        set _new_model_sections_list [list]
+        foreach _model_section $_model_sections_list {
+            incr _section_count
             
-            if { $section_count < 3 } {
-                set section_list [split $model_section \n\r]
-                set new_section_list [list]
-                foreach calc_line $section_list {
-                    if { ![regsub -- {=} $calc_line "\[expr \{ " calc_line] } {
-                        append err_text "'${calc_line}' ignored. No equal sign found.\n"
-                        incr err_state
-                        set $calc_line ""
+            if { $_section_count < 3 } {
+                set _section_list [split $_model_section \n\r]
+                set _new_section_list [list]
+                foreach _calc_line $_section_list {
+                    if { ![regsub -- {=} $_calc_line "\[expr \{ " _calc_line] } {
+                        append _err_text "'${_calc_line}' ignored. No equal sign found.\n"
+                        incr _err_state
+                        set _calc_line ""
                     }
-                    set calc_line "set ${calc_line} \} \]"
-                    set varname [trim [string range ${calc_line} 5 [string first expr $calc_line]-2]]
-                    if { ![info exists $varname_list] } {
+                    set _calc_line "set ${_calc_line} \} \]"
+                    set _varname [trim [string range ${_calc_line} 5 [string first expr $_calc_line]-2]]
+                    
+                    if { ![info exists varname_list] } {
                         # create list and array history for each variable for logging values of each iteration (for post run analysis etc.)
-                        set ${varname}_list [list]
-                        array set ${varname}_arr [list]
+                        set ${_varname}_list [list]
+                        array set ${_varname}_arr [list]
 
                     }
-                    if { [string length $calc_line ] > 0 } { 
-                        lappend new_section_list $calc_line
+                    if { [string length $_calc_line ] > 0 } { 
+                        lappend _new_section_list $_calc_line
                     }
                 }
-                set section_list $new_section_list
+                set _section_list $_new_section_list
             }
-            if { $section_count eq 1 } {
-                set new_section_list [list]
-                foreach calc_line $section_list {
+            if { $_section_count eq 1 } {
+                set _new_section_list [list]
+                foreach _calc_line $_section_list {
                     # substitute var_arr(0) for variables on left side
-                    set varname [trim [string range ${calc_line} 5 [string first expr $calc_line]-2]]
-                    regsub -- $varname $calc_line "${varname}_arr(0)" calc_line
+                    set _varname [trim [string range ${_calc_line} 5 [string first expr $_calc_line]-2]]
+                    regsub -- $_varname $_calc_line "${_varname}_arr(0)" _calc_line
                     # initial period is period 0
-                    if { [string length $calc_line ] > 0 } { 
-                        lappend new_section_list $calc_line
+                    if { [string length $_calc_line ] > 0 } { 
+                        lappend _new_section_list $_calc_line
                     }
                 }
-                set section_list $new_section_list
+                set _section_list $_new_section_list
             }
 
-            if { $section_count eq 2 } {
-                set new_section_list [list]
-                foreach calc_line $section_list {
+            if { $_section_count eq 2 } {
+                set _new_section_list [list]
+                foreach _calc_line $_section_list {
                     # substitute var_arr($i) for variables on left side
-                    set varname [trim [string range ${calc_line} 5 [string first expr $calc_line]-2]]
-                    regsub -- $varname $calc_line "${varname}_arr(\$i)" calc_line
+                    set _varname [trim [string range ${_calc_line} 5 [string first expr $_calc_line]-2]]
+                    regsub -- $_varname $_calc_line "${_varname}_arr(\$i)" _calc_line
 
-                    # substitute var_arr($h) for variables on right side
+                    # substitute var_arr($_h) for variables on right side
                     # for each string found not an array or within paraenthesis, 
-                    regsub -nocase -all -- {[\$]([a-z0-9_]*)[^\(]} $calc_line "\1_arr(\$h)" calc_line
-                    if { [string length $calc_line ] > 0 } { 
-                        lappend new_section_list $calc_line
+                    regsub -nocase -all -- {[\$]([a-z0-9_]*)[^\(]} $_calc_line "\1_arr(\$h)" _calc_line
+                    if { [string length $_calc_line ] > 0 } { 
+                        lappend _new_section_list $_calc_line
                     }
                 }
-                set section_list $new_section_list
+                set _section_list $_new_section_list
             }
 
 
 
-            if { $section_count eq 3 } {
-                set section_list [split $model_section \n\r\ \,]
-                set new_section_list [list]
-                set variables_list [list]
+            if { $_section_count eq 3 } {
+                set _section_list [split $_model_section \n\r\ \,]
+                set _new_section_list [list]
+                set _variables_list [list]
                 # report values 
                 # convert to list of variables that get converted into a list of lists.
                 # to be processed externally (sorted etc)
-                foreach named_var $section_list {
-                    set named_var [trim $named_var]
+                foreach _named_var $_section_list {
+                    set _named_var [trim $_named_var]
                 }
-                set section_list $new_section_list
+                set _section_list $_new_section_list
             }
             
-            if { $section_count eq 4 } {
-                set section_list [split $model_section \n\r]
-                set new_section_list [list]
-                foreach calc_line $section_list {
-                    if { ![regsub -- {=} $calc_line {} calc_line] } {
-                        append err_text "'${calc_line}' ignored. No equal sign found.\n"
-                        incr err_state
-                        set $calc_line ""
+            if { $_section_count eq 4 } {
+                set _section_list [split $_model_section \n\r]
+                set _new_section_list [list]
+                foreach _calc_line $_section_list {
+                    if { ![regsub -- {=} $_calc_line {} _calc_line] } {
+                        append _err_text "'${_calc_line}' ignored. No equal sign found.\n"
+                        incr _err_state
+                        set _calc_line ""
                     }
-                    set calc_line "set ${calc_line}"
-                    if { [string length $named_var] > 0 } {
-                        lappend variables_list $named_var
+                    set _calc_line "set ${_calc_line}"
+                    if { [string length $_named_var] > 0 } {
+                        lappend _variables_list $_named_var
                     }
                 }
-                set section_list $new_section_list
+                set _section_list $_new_section_list
             }
-            lappend new_model_sections_list $section_list
+            lappend _new_model_sections_list $_section_list
         } 
-        set model_sections_list $new_model_sections_list
-        # return compiled model as list of lists
-        return $model_sections_list
-
+        set _model_sections_list $_new_model_sections_list
+        #  compiled model as list of lists
 
     } else {
-        set output [list "ERROR: Unable to compile model. ${err_state} Errors. \n ${err_text}" $model_sections_list]
-        return $output
-
+        set _output [list "ERROR: Unable to compile model. ${_err_state} Errors. \n ${_err_text}" $_model_sections_list]
+        return $_output
     }
 
+#compute $_model_sections_list
+    # 0 iterations = compile only, do not compute
+    if { $_number_of_iterations == 0 } {
+        return $_output
+    }
+
+    # set initital conditions
+    set _model0 [lindex $_model_sections_list 0]
+    foreach _line $_model0 {
+
+        # given: variable default for iteration 0: default_arr(0) 
+
+        #  a variable supplied by user is {var}
+        # each {var} gets a {var}_arr($i) and {var}_list which log values through iterations ($i).
+        # If default_arr(0) exists and {var}_arr(0) does not exist, set {var}_arr(0) to $_default_arr(0)
+        # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
+        exec $_line
+    }
+
+    set _model1 [lindex $_model_sections_list 1]
+    # if $_default is defined, step through variables, set _any unset variables to $default
+    if { [info exists default] } {
+        set _dependent_var_fragment_list [split $_model1 {_arr($h)} ]
+        foreach section_fragment $_dependent_var_fragment_list {
+            if { [regsub -nocase -- {[\$]([a-z0-9_]*)[^\(]$} $_section_fragment _dependent_variable] } {
+                if { ![info exists ${_dependent_variable}_arr(0) ] } {
+                    set ${_dependent_variable}_arr(0) $default
+                }
+            }
+        }
+    }
+
+    set h 0
+    set timestamp(0) [clock seconds]
+    for {set i 1} {$i <= $_number_of_iterations} {incr i} {
+        
+        foreach line $_model1 {
+
+            # given: variable default for iteration 0: default_arr(0) 
+
+        #  a variable supplied by user is {var}
+        # each {var} gets a {var}_arr($i) and {var}_list which log values through iterations ($i).
+        # If default_arr(0) exists and {var}_arr(0) does not exist, set {var}_arr(0) to $default_arr(0)
+        # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
+            exec $_line
+        }
+        set timestamp($i) [clock seconds]
+        set dt($i) [expr { $timestamp($i) - $timestamp($h) } ]
+        set h $i
+    }
 }
 
-ad_proc -private acc_fin::model_compute { 
-    model 
-    {number}
-    {arg1}
-    {arg2}
-    {arg3}
-} {
-    Loop through model N (number) iterations.
-    arg1, arg2, arg3 are passed to the model, a feature for adding variances to model computations, such as interval_duration and parameter ranges
-} {
-    # given: variable default for iteration 0: default_arr(0) 
-    #  a variable supplied by user is {var}
-    # each {var} gets a {var}_arr($i) and {var}_list which log values through iterations ($i).
-    # If default_arr(0) exists and {var}_arr(0) does not exist, set {var}_arr(0) to $default_arr(0)
-    # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
-
-} 
+ 
 
 ad_proc -private acc_fin::gl_array_create {
     array_name
