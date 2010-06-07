@@ -59,8 +59,10 @@ ad_proc -private acc_fin::template_model {
     switch -exact -- $template_number {
         0 { set template "
 period = 0
+years = 5
 periods_per_year = 12
-total_periods = 20
+total_periods = periods_per_year * years
+
 \#
 period = i
 year = int( ( period + ( periods_per_year - 1 ) / periods_per_year ) )
@@ -130,33 +132,33 @@ ad_proc -private acc_fin::model_compute {
 
     # for security, compiler should not allow square brackets, exec, source, or proc
     set _err_state 0
-    set _err_text 0
-    if { [regexp -nocase -- {[^a-z0-9_]exec[^a-z0-9_]} ] } {
+    set _err_text ""
+    if { [regexp -nocase -- {[^a-z0-9_]exec[^a-z0-9_]} $model] } {
         incr _err_state
         append _err_text "Error: 'exec' is not permitted in model definition. \n"
     }
-    if { [regexp -nocase -- {[^a-z0-9_]upvar[^a-z0-9_]} ] } {
+    if { [regexp -nocase -- {[^a-z0-9_]upvar[^a-z0-9_]} $model] } {
         incr _err_state
         append _err_text "Error: 'upvar' is not permitted in model definition. \n"
     }
-    if { [regexp -nocase -- {[^a-z0-9_]uplevel[^a-z0-9_]} ] } {
+    if { [regexp -nocase -- {[^a-z0-9_]uplevel[^a-z0-9_]} $model] } {
         incr _err_state
         append _err_text "Error: 'uplevel' is not permitted in model definition. \n"
     }
-    if { [regexp -nocase -- {[^a-z0-9_]proc[^a-z0-9_]} ] } {
+    if { [regexp -nocase -- {[^a-z0-9_]proc[^a-z0-9_]} $model] } {
         incr _err_state 
         append _err_text "Error: 'proc' is not permitted in model definition. \n"
     }
-    if { [regexp -nocase -- {[^a-z0-9_]source[^a-z0-9_]} ] } {
+    if { [regexp -nocase -- {[^a-z0-9_]source[^a-z0-9_]} $model] } {
         incr _err_state 
         append _err_text "Error: 'source' is not permitted in model definition. \n"
     }
-    if { [regexp -nocase -- {[\]\[]} ] } {
+    if { [regexp -nocase -- {[\]\[]} $model] } {
         incr _err_state 
         append _err_text "Error: 'square brackets' are not permitted in model definition. \n"
     }
 
-    if { $_err_state 0 } {
+    if { $_err_state == 0 } {
         # convert all internal variables to _variable_name to not get confused with model variables
         set _model $model
         set _number_of_iterations $number_of_iterations
@@ -177,18 +179,15 @@ ad_proc -private acc_fin::model_compute {
                         append _err_text "'${_calc_line}' ignored. No equal sign found.\n"
                         incr _err_state
                         set _calc_line ""
-                    }
-                    set _calc_line "set ${_calc_line} \} \]"
-                    set _varname [trim [string range ${_calc_line} 5 [string first expr $_calc_line]-2]]
-                    
-                    if { ![info exists varname_list] } {
-                        # create list and array history for each variable for logging values of each iteration (for post run analysis etc.)
-                        set ${_varname}_list [list]
-                        array set ${_varname}_arr [list]
-
-                    }
-                    if { [string length $_calc_line ] > 0 } { 
+                    } else {
+                        set _calc_line "set ${_calc_line} \} \]"
+                        set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
                         lappend _new_section_list $_calc_line
+                        if { ![info exists ${_varname}_list] } {
+                            # create list and array history for each variable for logging values of each iteration (for post run analysis etc.)
+                            set ${_varname}_list [list]
+                            array set ${_varname}_arr [list]
+                        }
                     }
                 }
                 set _section_list $_new_section_list
@@ -197,8 +196,13 @@ ad_proc -private acc_fin::model_compute {
                 set _new_section_list [list]
                 foreach _calc_line $_section_list {
                     # substitute var_arr(0) for variables on left side
-                    set _varname [trim [string range ${_calc_line} 5 [string first expr $_calc_line]-2]]
+                    set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
                     regsub -- $_varname $_calc_line "${_varname}_arr(0)" _calc_line
+                    # and on right side
+                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr(0) } _calc_line
+                    # make all numbers double precision
+                    regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
+
                     # initial period is period 0
                     if { [string length $_calc_line ] > 0 } { 
                         lappend _new_section_list $_calc_line
@@ -211,12 +215,16 @@ ad_proc -private acc_fin::model_compute {
                 set _new_section_list [list]
                 foreach _calc_line $_section_list {
                     # substitute var_arr($i) for variables on left side
-                    set _varname [trim [string range ${_calc_line} 5 [string first expr $_calc_line]-2]]
+                    set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
                     regsub -- $_varname $_calc_line "${_varname}_arr(\$i)" _calc_line
 
                     # substitute var_arr($h) for variables on right side
                     # for each string found not an array or within paraenthesis, 
-                    regsub -nocase -all -- {[\$]([a-z0-9_]*)[^\(]} $_calc_line "\1_arr(\$h)" _calc_line
+                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($h) } _calc_line
+
+                    # make all numbers double precision
+                    regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
+
                     if { [string length $_calc_line ] > 0 } { 
                         lappend _new_section_list $_calc_line
                     }
@@ -234,10 +242,13 @@ ad_proc -private acc_fin::model_compute {
                 # convert to list of variables that get converted into a list of lists.
                 # to be processed externally (sorted etc)
                 foreach _named_var $_section_list {
-                    append _variables_list [trim $_named_var]
+                    set _named_var_trimmed [string trim $_named_var]
+                    if { [string length $_named_var_trimmed] > 0 } {
+                        lappend _variables_list $_named_var_trimmed
+                    }
+                    set _new_section_list $_variables_list
+                    set _section_list $_new_section_list
                 }
-                set _new_section_list $variables_list
-                set _section_list $_new_section_list
             }
             
             if { $_section_count eq 4 } {
@@ -259,14 +270,17 @@ ad_proc -private acc_fin::model_compute {
         #  compiled model as list of lists
 
     } else {
-        set _output [concat [list "ERRORS" ${_err_state}] [concat ${_err_text} $_model_sections_list]]
+        set _output [linsert $_model_sections_list 0 [list "ERRORS: ${_err_text}" ${_err_state}] ]
+        ns_log Notice "acc_fin::model_compute compile end --with errors"
         return $_output
     }
 
 #compute $_model_sections_list
     # 0 iterations = compile only, do not compute
     if { $_number_of_iterations == 0 } {
-        return [concat [list "ERRORS" 0] $_model_sections_list]
+        ns_log Notice "acc_fin::model_compute compile end"
+        set _output [linsert $_model_sections_list 0 [list "ERRORS" 0]]
+        return $_output
     }
 
     # set initital conditions
@@ -283,14 +297,14 @@ ad_proc -private acc_fin::model_compute {
     if { [info exists default] } {
         set _dependent_var_fragment_list [split $_model1 {_arr($h)} ]
         foreach section_fragment $_dependent_var_fragment_list {
-            if { [regsub -nocase -- {[\$]([a-z0-9_]*)[^\(]$} $_section_fragment _dependent_variable] } {
+            if { [regsub -nocase -- {[\$([a-z][a-z0-9_]+)[^\(]$} $_section_fragment _dependent_variable] } {
                 if { ![info exists ${_dependent_variable}_arr(0) ] } {
                     set ${_dependent_variable}_arr(0) $default
                 }
             }
         }
     }
-
+        
     # initial conditions
     set timestamp [clock seconds]
     set timestamp_arr(0) $timestamp
@@ -333,11 +347,15 @@ ad_proc -private acc_fin::model_compute {
     set _model3 [lindex $_model_sections_list 3]
     
     foreach _line $_model3 {
-        set _varname [trim [string range ${_line} 4 [string first " " ${_line} 4]]]
+        set _varname [string trim [string range ${_line} 4 [string first " " ${_line} 4]]]
         set _calc_value [eval $_line]
         lappend _output [list $_varname $_calc_value]
     }
-    return [concat [list "ERRORS" 0] $_output]
+
+    ns_log Notice "acc_fin::model_compute end"
+    set _output [linsert $_output 0 [list "ERRORS" 0]
+    return $_output
+
 }
 
  
