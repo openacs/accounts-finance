@@ -80,6 +80,11 @@ ad_proc -private acc_fin::model_compute {
     {arg2 ""}
     {arg3 ""}
 } {
+    Returns a list of lists.
+    First list element denotes how many errors there were.
+    If number_of_iterations is greater than 0, Returns a list of lists, where each list element consists of a variable name and the values that it returns after each iteration, including the initial conditions. The report calculations return the variable name and the value returned from the function evaluation.
+    If there are errors during compile, then subsequent list elements are the results of the model compile, useful for debugging purposes.
+
     Loop through model N (number) iterations, 0 iterations means pre-compile only (and check model for immediate errors).
     arg1, arg2, arg3 are passed to the model, a feature for adding variances to model computations, such as interval_duration and parameter ranges
     shorthand consists of these parts (with examples):
@@ -103,6 +108,8 @@ ad_proc -private acc_fin::model_compute {
     h is i - 1
     timestamp(i) is timestamp associated with end of period in seconds from system epoch
     dt(i) is duration of a period between timestamp(i) - timestamp(h) in seconds
+    
+    An error in compilation returns the compiled model with error info.
 } {
 
     # COMPILE model before executing. Do not bypass this as it includes security checks.
@@ -207,7 +214,7 @@ ad_proc -private acc_fin::model_compute {
                     set _varname [trim [string range ${_calc_line} 5 [string first expr $_calc_line]-2]]
                     regsub -- $_varname $_calc_line "${_varname}_arr(\$i)" _calc_line
 
-                    # substitute var_arr($_h) for variables on right side
+                    # substitute var_arr($h) for variables on right side
                     # for each string found not an array or within paraenthesis, 
                     regsub -nocase -all -- {[\$]([a-z0-9_]*)[^\(]} $_calc_line "\1_arr(\$h)" _calc_line
                     if { [string length $_calc_line ] > 0 } { 
@@ -227,8 +234,9 @@ ad_proc -private acc_fin::model_compute {
                 # convert to list of variables that get converted into a list of lists.
                 # to be processed externally (sorted etc)
                 foreach _named_var $_section_list {
-                    set _named_var [trim $_named_var]
+                    append _variables_list [trim $_named_var]
                 }
+                set _new_section_list $variables_list
                 set _section_list $_new_section_list
             }
             
@@ -242,9 +250,6 @@ ad_proc -private acc_fin::model_compute {
                         set _calc_line ""
                     }
                     set _calc_line "set ${_calc_line}"
-                    if { [string length $_named_var] > 0 } {
-                        lappend _variables_list $_named_var
-                    }
                 }
                 set _section_list $_new_section_list
             }
@@ -254,30 +259,26 @@ ad_proc -private acc_fin::model_compute {
         #  compiled model as list of lists
 
     } else {
-        set _output [list "ERROR: Unable to compile model. ${_err_state} Errors. \n ${_err_text}" $_model_sections_list]
+        set _output [concat [list "ERRORS" ${_err_state}] [concat ${_err_text} $_model_sections_list]]
         return $_output
     }
 
 #compute $_model_sections_list
     # 0 iterations = compile only, do not compute
     if { $_number_of_iterations == 0 } {
-        return $_output
+        return [concat [list "ERRORS" 0] $_model_sections_list]
     }
 
     # set initital conditions
     set _model0 [lindex $_model_sections_list 0]
     foreach _line $_model0 {
-
-        # given: variable default for iteration 0: default_arr(0) 
-
-        #  a variable supplied by user is {var}
-        # each {var} gets a {var}_arr($i) and {var}_list which log values through iterations ($i).
-        # If default_arr(0) exists and {var}_arr(0) does not exist, set {var}_arr(0) to $_default_arr(0)
-        # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
-        exec $_line
+         eval $_line
     }
 
     set _model1 [lindex $_model_sections_list 1]
+    # If default_arr(0) exists and {var}_arr(0) does not exist, set {var}_arr(0) to $default_arr(0)
+    # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
+
     # if $_default is defined, step through variables, set _any unset variables to $default
     if { [info exists default] } {
         set _dependent_var_fragment_list [split $_model1 {_arr($h)} ]
@@ -290,24 +291,53 @@ ad_proc -private acc_fin::model_compute {
         }
     }
 
+    # initial conditions
+    set timestamp [clock seconds]
+    set timestamp_arr(0) $timestamp
+    set h_arr(0) -1
+    set i_arr(0) 0
+ 
+    # iteration conditions
     set h 0
-    set timestamp(0) [clock seconds]
     for {set i 1} {$i <= $_number_of_iterations} {incr i} {
-        
-        foreach line $_model1 {
+        # other values are set in the model automatically
+        set h_arr($i) $h
+        set i_arr($i) $i
 
-            # given: variable default for iteration 0: default_arr(0) 
-
-        #  a variable supplied by user is {var}
-        # each {var} gets a {var}_arr($i) and {var}_list which log values through iterations ($i).
-        # If default_arr(0) exists and {var}_arr(0) does not exist, set {var}_arr(0) to $default_arr(0)
-        # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
-            exec $_line
+        foreach _line $_model1 {
+            eval $_line
         }
-        set timestamp($i) [clock seconds]
-        set dt($i) [expr { $timestamp($i) - $timestamp($h) } ]
+        # timestamp for $i is after $i iteration is done.
+        set timestamp_arr($i) [clock seconds]
+        set dt_arr($i) [expr { $timestamp_arr($i) - $timestamp_arr($h) } ]
         set h $i
     }
+
+
+    # make ordered lists of each of the different arrays (by index), for each of the variables that are being reported
+    # So, {var}_arr(0..n) becomes {var}_list
+    set _model2 [lindex $_model_sections_list 2]
+    for {set i 0} {$i <= $_number_of_iterations} {incr i} {
+        foreach _variable_name $_model2 {
+            lappend ${_variable_name}_list ${_variable_name}_arr($i)
+        }
+    }
+    set _output [list]
+    for {set i 0} {$i <= $_number_of_iterations} {incr i} {
+        foreach _variable_name $_model2 {
+            lappend _output [concat $_variable_name ${_variable_name}_list]
+        }
+    }
+
+    # report calculations
+    set _model3 [lindex $_model_sections_list 3]
+    
+    foreach _line $_model3 {
+        set _varname [trim [string range ${_line} 4 [string first " " ${_line} 4]]]
+        set _calc_value [eval $_line]
+        lappend _output [list $_varname $_calc_value]
+    }
+    return [concat [list "ERRORS" 0] $_output]
 }
 
  
