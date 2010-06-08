@@ -65,14 +65,14 @@ periods_per_year = 12
 total_periods = periods_per_year * years
 
 \#
-period = i
+period = i + 1
 periods_per_year = periods_per_year
-year = int( ( period + ( periods_per_year - 1 ) / periods_per_year ) )
+year = int( ( ( i +  periods_per_year - 1 ) / periods_per_year ) )
 \#
 i period year 
 \# 
-periods_per_year = \$periods_per_year
-total_periods = \$total_periods
+periods_per_year = periods_per_year
+total_periods = total_periods
 "
 
     }
@@ -301,7 +301,7 @@ ns_log Notice "3: $_line"
 
     # if $_default is defined, step through variables, set _any unset variables to $default
     if { [info exists default_arr(0) ] } {
-        set _dependent_var_fragment_list [split $_model1 {(} ]
+        set _dependent_var_fragment_list [split $_model1 {\(} ]
 ns_log Notice "_dependent_var_fragment_list $_dependent_var_fragment_list"
         foreach _section_fragment $_dependent_var_fragment_list {
             if { [regexp -nocase -- {[\$ ]([a-z][a-z0-9_]+)[_][a][r][r]$} $_section_fragment _scratch _dependent_variable] } {
@@ -343,18 +343,16 @@ ns_log Notice "_dependent_var_fragment_list $_dependent_var_fragment_list"
     for {set i 0} {$i <= $_number_of_iterations} {incr i} {
         foreach _variable_name $_model2 {
             lappend ${_variable_name}_list [set ${_variable_name}_arr($i)]
-#            lappend ${_variable_name}_list ${_variable_name}_arr($i)
         }
     }
     set _output [list]
-    for {set i 0} {$i <= $_number_of_iterations} {incr i} {
-        foreach _variable_name $_model2 {
-            lappend _output [linsert [set ${_variable_name}_list] 0 $_variable_name]
-        }
+    foreach _variable_name $_model2 {
+        lappend _output [linsert [set ${_variable_name}_list] 0 $_variable_name]
     }
 
+
     # report calculations
-        set _model3 [lindex $_model_sections_list 3]
+    set _model3 [lindex $_model_sections_list 3]
     
     foreach _line $_model3 {
         set _varname [string trim [string range ${_line} 4 [string first " " ${_line} 4]]]
