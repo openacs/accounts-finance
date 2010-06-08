@@ -58,6 +58,7 @@ ad_proc -private acc_fin::template_model {
 } {
     switch -exact -- $template_number {
         0 { set template "
+default = 0
 period = 0
 years = 5
 periods_per_year = 12
@@ -65,9 +66,13 @@ total_periods = periods_per_year * years
 
 \#
 period = i
+periods_per_year = periods_per_year
 year = int( ( period + ( periods_per_year - 1 ) / periods_per_year ) )
 \#
-i period year periods_per_year total_periods
+i period year 
+\# 
+periods_per_year = \$periods_per_year
+total_periods = \$total_periods
 "
 
     }
@@ -286,6 +291,7 @@ ad_proc -private acc_fin::model_compute {
     # set initital conditions
     set _model0 [lindex $_model_sections_list 0]
     foreach _line $_model0 {
+ns_log Notice "3: $_line"
          eval $_line
     }
 
@@ -294,12 +300,15 @@ ad_proc -private acc_fin::model_compute {
     # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
 
     # if $_default is defined, step through variables, set _any unset variables to $default
-    if { [info exists default] } {
-        set _dependent_var_fragment_list [split $_model1 {_arr($h)} ]
-        foreach section_fragment $_dependent_var_fragment_list {
-            if { [regsub -nocase -- {[\$([a-z][a-z0-9_]+)[^\(]$} $_section_fragment _dependent_variable] } {
+    if { [info exists default_arr(0) ] } {
+        set _dependent_var_fragment_list [split $_model1 {(} ]
+ns_log Notice "_dependent_var_fragment_list $_dependent_var_fragment_list"
+        foreach _section_fragment $_dependent_var_fragment_list {
+            if { [regexp -nocase -- {[\$ ]([a-z][a-z0-9_]+)[_][a][r][r]$} $_section_fragment _scratch _dependent_variable] } {
+
                 if { ![info exists ${_dependent_variable}_arr(0) ] } {
-                    set ${_dependent_variable}_arr(0) $default
+                    set ${_dependent_variable}_arr(0) $default_arr(0)
+                    ns_log Notice "1: ${_dependent_variable}_arr(0)"
                 }
             }
         }
@@ -333,18 +342,19 @@ ad_proc -private acc_fin::model_compute {
     set _model2 [lindex $_model_sections_list 2]
     for {set i 0} {$i <= $_number_of_iterations} {incr i} {
         foreach _variable_name $_model2 {
-            lappend ${_variable_name}_list ${_variable_name}_arr($i)
+            lappend ${_variable_name}_list [set ${_variable_name}_arr($i)]
+#            lappend ${_variable_name}_list ${_variable_name}_arr($i)
         }
     }
     set _output [list]
     for {set i 0} {$i <= $_number_of_iterations} {incr i} {
         foreach _variable_name $_model2 {
-            lappend _output [concat $_variable_name ${_variable_name}_list]
+            lappend _output [linsert [set ${_variable_name}_list] 0 $_variable_name]
         }
     }
 
     # report calculations
-    set _model3 [lindex $_model_sections_list 3]
+        set _model3 [lindex $_model_sections_list 3]
     
     foreach _line $_model3 {
         set _varname [string trim [string range ${_line} 4 [string first " " ${_line} 4]]]
@@ -352,8 +362,8 @@ ad_proc -private acc_fin::model_compute {
         lappend _output [list $_varname $_calc_value]
     }
 
-    ns_log Notice "acc_fin::model_compute end"
-    set _output [linsert $_output 0 [list "ERRORS" 0]
+        ns_log Notice "acc_fin::model_compute end"
+        set _output [linsert $_output 0 [list "ERRORS" 0]]
     return $_output
 
 }
@@ -705,6 +715,7 @@ mfg {
 }
 
 
+
 ad_proc -private acc_fin::gl_tx_balanced {
     transaction_list 
 } {
@@ -720,9 +731,10 @@ ad_proc -private acc_fin::gl_tx_balanced {
             set sum [expr { $sum + $term } ]
         } else {
             set errors 1
+        }
+        set balanced [expr { $sum == 0. && $errors == 0 } ]
+        return $balanced
     }
-    set balanced [expr { $sum == 0. && $errors == 0 } ]
-    return $balanced
 }
 
 ad_proc -private acc_fin::gl_tx {
