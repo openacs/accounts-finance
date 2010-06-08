@@ -71,8 +71,8 @@ year = int( ( ( i +  periods_per_year - 1 ) / periods_per_year ) )
 \#
 i period year 
 \# 
-periods_per_year = periods_per_year
-total_periods = total_periods
+sum_periods = f::sum \$i_list ;
+sum_years = f::sum \$year_list ;
 "
 
     }
@@ -219,13 +219,13 @@ ad_proc -private acc_fin::model_compute {
             if { $_section_count eq 2 } {
                 set _new_section_list [list]
                 foreach _calc_line $_section_list {
-                    # substitute var_arr($i) for variables on left side
+                    # substitute var_arr($_i) for variables on left side
                     set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
-                    regsub -- $_varname $_calc_line "${_varname}_arr(\$i)" _calc_line
+                    regsub -- $_varname $_calc_line "${_varname}_arr(\$_i)" _calc_line
 
-                    # substitute var_arr($h) for variables on right side
+                    # substitute var_arr($_h) for variables on right side
                     # for each string found not an array or within paraenthesis, 
-                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($h) } _calc_line
+                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
 
                     # make all numbers double precision
                     regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
@@ -260,12 +260,19 @@ ad_proc -private acc_fin::model_compute {
                 set _section_list [split $_model_section \n\r]
                 set _new_section_list [list]
                 foreach _calc_line $_section_list {
-                    if { ![regsub -- {=} $_calc_line {} _calc_line] } {
+                    if { ![regsub -- {=} $_calc_line "\[expr \{ " _calc_line] } {
                         append _err_text "'${_calc_line}' ignored. No equal sign found.\n"
                         incr _err_state
                         set _calc_line ""
+                    } else {
+                        set _calc_line "set ${_calc_line} \} \]"
+                        regsub -all -- { f::} $_calc_line { [f::} _calc_line
+                        regsub -all -- { acc_fin::} $_calc_line { [acc_fin::} _calc_line
+                        regsub -all -- { qaf_} $_calc_line { [qaf_} _calc_line
+                        regsub -all -- {;} $_calc_line { ] } _calc_line
+
+                        lappend _new_section_list $_calc_line
                     }
-                    set _calc_line "set ${_calc_line}"
                 }
                 set _section_list $_new_section_list
             }
@@ -291,7 +298,6 @@ ad_proc -private acc_fin::model_compute {
     # set initital conditions
     set _model0 [lindex $_model_sections_list 0]
     foreach _line $_model0 {
-ns_log Notice "3: $_line"
          eval $_line
     }
 
@@ -302,13 +308,11 @@ ns_log Notice "3: $_line"
     # if $_default is defined, step through variables, set _any unset variables to $default
     if { [info exists default_arr(0) ] } {
         set _dependent_var_fragment_list [split $_model1 {\(} ]
-ns_log Notice "_dependent_var_fragment_list $_dependent_var_fragment_list"
         foreach _section_fragment $_dependent_var_fragment_list {
             if { [regexp -nocase -- {[\$ ]([a-z][a-z0-9_]+)[_][a][r][r]$} $_section_fragment _scratch _dependent_variable] } {
 
                 if { ![info exists ${_dependent_variable}_arr(0) ] } {
                     set ${_dependent_variable}_arr(0) $default_arr(0)
-                    ns_log Notice "1: ${_dependent_variable}_arr(0)"
                 }
             }
         }
@@ -317,22 +321,26 @@ ns_log Notice "_dependent_var_fragment_list $_dependent_var_fragment_list"
     # initial conditions
     set timestamp [clock seconds]
     set timestamp_arr(0) $timestamp
-    set h_arr(0) -1
-    set i_arr(0) 0
+    set h_arr(0) -1.
+    set i_arr(0) 0.
  
     # iteration conditions
-    set h 0
-    for {set i 1} {$i <= $_number_of_iterations} {incr i} {
+    set h 0.
+    set _h 0
+    for {set _i 1} {$_i <= $_number_of_iterations} {incr _i} {
         # other values are set in the model automatically
-        set h_arr($i) $h
-        set i_arr($i) $i
+        set h_arr($_i) $h
+        set i [expr { double($_i) } ]
+        set i_arr($_i) $i
+
 
         foreach _line $_model1 {
             eval $_line
         }
-        # timestamp for $i is after $i iteration is done.
-        set timestamp_arr($i) [clock seconds]
-        set dt_arr($i) [expr { $timestamp_arr($i) - $timestamp_arr($h) } ]
+        # timestamp for $_i is after $_i iteration is done.
+        set timestamp_arr($_i) [clock seconds]
+        set dt_arr($_i) [expr { $timestamp_arr($_i) - $timestamp_arr($_h) } ]
+        set _h $_i
         set h $i
     }
 
@@ -340,9 +348,9 @@ ns_log Notice "_dependent_var_fragment_list $_dependent_var_fragment_list"
     # make ordered lists of each of the different arrays (by index), for each of the variables that are being reported
     # So, {var}_arr(0..n) becomes {var}_list
     set _model2 [lindex $_model_sections_list 2]
-    for {set i 0} {$i <= $_number_of_iterations} {incr i} {
+    for {set _i 0} {$_i <= $_number_of_iterations} {incr _i} {
         foreach _variable_name $_model2 {
-            lappend ${_variable_name}_list [set ${_variable_name}_arr($i)]
+            lappend ${_variable_name}_list [set ${_variable_name}_arr($_i)]
         }
     }
     set _output [list]
