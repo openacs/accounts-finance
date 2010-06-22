@@ -110,23 +110,35 @@ o7000_other_tracking = 0
 o7010_EBITDA = 0
 periods_per_year = 12
 
-base_system_performance = 2298.
-annual_system_degredation = 0.005
-system_power_output_peak = 19395
-sys_output_period = 0
+energy_production_annual = 44570000.  -- kWh/kW  or kWh annual energy output per rated kW
+energy_output_cert_annual = 43288918. -- kWh/kW
+forecast_peak_power = 2298.01 -- hours (was base_sys_perf)
+annual_system_degredation = 0.005  -- percent as decimal
+system_power_output_peak = 19395. -- kW
+sys_output_period = 0 -- kWh
+
+ppa_rate = .2 -- $/kWh
+ppa_escalation = .025 -- percent as decimal (factor)
+power_revenue_period = 0 -- $  (was  direct_income)
+
 
 \#
 period = i + 1
 periods_per_year = periods_per_year
-year = double( int( ( ( i +  periods_per_year - 1 ) / periods_per_year ) ) )
+year = int( ( ( i +  periods_per_year ) / periods_per_year ) ) 
 next_year = year.i + 1
+prev_year = year.i - 1
 
-base_system_performance = base_system_performance
+sys_output_period = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; 
+power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i )
+
+forecast_peak_power = forecast_peak_power
 system_power_output_peak = system_power_output_peak
 annual_system_degredation = annual_system_degredation
-sys_output_period = acc_fin::energy_output base_system_performance system_power_output_peak annual_system_degredation year.i periods_per_year ; 
+ppa_rate = ppa_rate
+ppa_escalation = ppa_escalation
 \#
-i period next_year year sys_output_period system_power_output_peak annual_system_degredation base_system_performance
+i period next_year year sys_output_period power_revenue_period
 \# 
 sum_periods = f::sum \$i_list ;
 sum_years = f::sum \$year_list ;
@@ -245,6 +257,10 @@ ad_proc -private acc_fin::model_compute {
                         incr _err_state
                         set _calc_line ""
                     } else {
+                        set comment_start [string first " --" $_calc_line]
+                        if { $comment_start > 0 } {
+                            set _calc_line [string range $_calc_line 0 $comment_start]
+                        }
                         set _calc_line "set ${_calc_line} \} \]"
                         set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
                         regsub {[ ][ ]+} $_calc_line { } _calc_line
@@ -292,7 +308,8 @@ ad_proc -private acc_fin::model_compute {
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[\.][i][ ]} $_calc_line { $\1_arr($_i) } _calc_line
                     regsub -nocase -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
-                    regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
+                        regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
+                    regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
 
                     # make all numbers double precision
                     regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
