@@ -59,20 +59,69 @@ ad_proc -private acc_fin::template_model {
     switch -exact -- $template_number {
         0 { set template "
 default = 0
-period = 0
-years = 5
+a1000_ASSETS  = 0
+a1010_Cash = 0
+a1020_Inventories = 0
+a1030_AR = 0
+a1040_Prepaid_exp = 0
+a1050_PPE = 0
+a1060_Real_estate = 0
+a1070_Intangible_assets = 0
+a1080_other_fin_assets = 0
+a1090_equity_investments = 0
+a1100_biological_assets = 0
+l2000_LIABILITIES = 0
+l2010_AP = 0
+l2020_Provisions = 0
+l2030_other_liabilities = 0
+l2040_current_taxes = 0
+l2050_deferred_taxes = 0
+c3000_EQUITY = 0
+c3010_shares = 0
+c3020_capital_reserves = 0
+c3030_retained_earnings = 0
+g4000_Capital_Gains = 0
+g4010_gains = 0
+g4020_losses = 0
+i5000_REVENUES = 0
+i5010_sales = 0
+i5020_rent = 0
+i5030_service = 0
+i5040_other_revenue = 0
+e6000_COGS = 0
+e6010_inventory = 0
+e6020_freight = 0
+e6100_EXPENSES = 0
+e6110_Ops_land = 0
+e6120_Ops_labor_fixed = 0
+e6130_Ops_labor_var = 0
+e6140_Royalties = 0
+e6150_Rents = 0
+e6160_Debt_cost_Equity_int = 0
+e6170_other_expenses = 0
+e6200_Advertising = 0
+e6210_Banking_fees = 0
+e6220_Professional = 0
+e6230_Licenses = 0
+e6240_Telephone = 0
+e6250_Utilities = 0
+e6500_Taxes = 0
+o7000_other_tracking = 0
+o7010_EBITDA = 0
 periods_per_year = 12
-total_periods = periods_per_year * years
+
 
 \#
 period = i + 1
 periods_per_year = periods_per_year
 year = int( ( ( i +  periods_per_year - 1 ) / periods_per_year ) )
+next_year = year.i + 1
 \#
-i period year 
+i period next_year year 
 \# 
 sum_periods = f::sum \$i_list ;
 sum_years = f::sum \$year_list ;
+sum_next_years = f::sum \$next_year_list ;
 "
 
     }
@@ -105,6 +154,8 @@ ad_proc -private acc_fin::model_compute {
         y = i * 2 + 1
         z = pow( i , h ) * z
         for the above, the z refers automatically to the value from the previous iteration for consistency.
+        to use current iteration value, append the variable with .i as in z.i  This only works if z.i has been defined ie there must be a "z = " statement before a statement with "= z.i"
+
     section 3: list of variables to report with iterations
         z y
     section 4: analysis calculations
@@ -226,6 +277,7 @@ ad_proc -private acc_fin::model_compute {
                     # substitute var_arr($_h) for variables on right side
                     # for each string found not an array or within paraenthesis, 
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
+                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[\.][i][ ]} $_calc_line { $\1_arr($_i) } _calc_line
 
                     # make all numbers double precision
                     regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
