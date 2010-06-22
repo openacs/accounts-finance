@@ -110,14 +110,23 @@ o7000_other_tracking = 0
 o7010_EBITDA = 0
 periods_per_year = 12
 
+base_system_performance = 2298.
+annual_system_degredation = 0.005
+system_power_output_peak = 19395
+sys_output_period = 0
 
 \#
 period = i + 1
 periods_per_year = periods_per_year
-year = int( ( ( i +  periods_per_year - 1 ) / periods_per_year ) )
+year = double( int( ( ( i +  periods_per_year - 1 ) / periods_per_year ) ) )
 next_year = year.i + 1
+
+base_system_performance = base_system_performance
+system_power_output_peak = system_power_output_peak
+annual_system_degredation = annual_system_degredation
+sys_output_period = acc_fin::energy_output base_system_performance system_power_output_peak annual_system_degredation year.i periods_per_year ; 
 \#
-i period next_year year 
+i period next_year year sys_output_period system_power_output_peak annual_system_degredation base_system_performance
 \# 
 sum_periods = f::sum \$i_list ;
 sum_years = f::sum \$year_list ;
@@ -238,6 +247,7 @@ ad_proc -private acc_fin::model_compute {
                     } else {
                         set _calc_line "set ${_calc_line} \} \]"
                         set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
+                        regsub {[ ][ ]+} $_calc_line { } _calc_line
                         lappend _new_section_list $_calc_line
                         if { ![info exists ${_varname}_list] } {
                             # create list and array history for each variable for logging values of each iteration (for post run analysis etc.)
@@ -261,6 +271,7 @@ ad_proc -private acc_fin::model_compute {
 
                     # initial period is period 0
                     if { [string length $_calc_line ] > 0 } { 
+                        regsub {[ ][ ]+} $_calc_line { } _calc_line
                         lappend _new_section_list $_calc_line
                     }
                 }
@@ -277,12 +288,17 @@ ad_proc -private acc_fin::model_compute {
                     # substitute var_arr($_h) for variables on right side
                     # for each string found not an array or within paraenthesis, 
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
+                    # do this twice to catch stragglers since spaces may be delimiters for both sides
+                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[\.][i][ ]} $_calc_line { $\1_arr($_i) } _calc_line
+                    regsub -nocase -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
+                    regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
 
                     # make all numbers double precision
                     regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
 
                     if { [string length $_calc_line ] > 0 } { 
+                        regsub {[ ][ ]+} $_calc_line { } _calc_line
                         lappend _new_section_list $_calc_line
                     }
                 }
@@ -319,10 +335,10 @@ ad_proc -private acc_fin::model_compute {
                     } else {
                         set _calc_line "set ${_calc_line} \} \]"
                         regsub -all -- { f::} $_calc_line { [f::} _calc_line
-                        regsub -all -- { acc_fin::} $_calc_line { [acc_fin::} _calc_line
-                        regsub -all -- { qaf_} $_calc_line { [qaf_} _calc_line
-                        regsub -all -- {;} $_calc_line { ] } _calc_line
-
+                            regsub -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
+                                regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
+                                    regsub -all -- { ;} $_calc_line { ] } _calc_line
+                        regsub {[ ][ ]+} $_calc_line { } _calc_line
                         lappend _new_section_list $_calc_line
                     }
                 }
