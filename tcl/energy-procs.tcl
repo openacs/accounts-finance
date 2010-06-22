@@ -12,13 +12,13 @@ ad_proc -public acc_fin::energy_output {
     year
     intervals_per_year
 } {
-    returns the system energy output within an interval
+    Returns the system energy output within an interval.
     Unit returned is in kWh if these units are used:
-    base_system_performance (hours of available peak energy / year or kWh/kW )
-    peak_power_output ( kW )
-    annual_degredation ( percent expressed as a decimal number )  10% is 0.1
+    base_system_performance (hours of available peak energy / year or kWh/kW ),
+    peak_power_output ( kW ),
+    annual_degredation ( percent expressed as a decimal number ).  Ten percent is represented as 0.1
 } {
-    set energy_output [expr { $base_system_performance * $peak_power_output * ( 1. - (( $year - 1. ) * $annual_degredation ) ) / double($periods_per_year) } ]
+    set energy_output [expr { $base_system_performance * $peak_power_output * ( 1. - (( $year - 1. ) * $annual_degredation ) ) / double( $intervals_per_year ) } ]
     return $energy_output
 } 
 
