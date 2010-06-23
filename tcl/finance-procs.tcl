@@ -8,7 +8,7 @@ ad_library {
 namespace eval acc_fin {}
 
 
-ad_proc -private acc_fin::qaf_npv { 
+ad_proc -private acc_fin::npv { 
     net_period_list 
     discount_rates
     {intervals_per_year 1}
@@ -46,7 +46,7 @@ ad_proc -private acc_fin::qaf_npv {
      return $np_sum
  }
 
-ad_proc -private acc_fin::qaf_fvsimple { 
+ad_proc -private acc_fin::fvsimple { 
     net_period_list 
     annual_interest_rate
     {intervals_per_year 1}
@@ -70,13 +70,13 @@ ad_proc -private acc_fin::qaf_fvsimple {
      return $fv_sum
  }
 
-ad_proc -private acc_fin::qaf_discount_npv_curve { 
+ad_proc -private acc_fin::discount_npv_curve { 
     net_period_list
     {discounts ""}
     {intervals_per_year 1}
  } {
      Returns a list pair of discounts, NPVs over a range of discounts
-     uses acc_fin::qaf_npv
+     uses acc_fin::npv
  } {
    set discount_list [list]
      if { [string length $discounts] < 2 } {
@@ -92,18 +92,18 @@ ad_proc -private acc_fin::qaf_discount_npv_curve {
      }
      set npv_curve_list [list]
      foreach i $discount_list {
-         lappend npv_curve_list [list $i [acc_fin::qaf_npv $net_period_list [list $i] $intervals_per_year ]]
+         lappend npv_curve_list [list $i [acc_fin::npv $net_period_list [list $i] $intervals_per_year ]]
      }
      return $npv_curve_list
  }
 
-ad_proc -private acc_fin::qaf_irr { 
+ad_proc -private acc_fin::irr { 
     net_period_list 
     {intervals_per_year 1}
  } {
      Returns a list of Internal Rate of Returns, ie where NPV = 0.
      Hint: There can be more than one in complex cases.
-     uses acc_fin::qaf_npv
+     uses acc_fin::npv
  } {
      # let's get a sample from a practical range of discounts:
      #0., 0.01, 0.03, 0.07, 0.15, 0.31, 0.63, 1.27, 2.55, 5.11, 10.23, 20.47, 40.95, 81.91
@@ -115,7 +115,7 @@ ad_proc -private acc_fin::qaf_irr {
      set start_range [list]
      for {set i 0. } { $i < 100. } { set i [expr { $i * 2. + .01 } ] } {
          set npv_test_discount(${test_nbr}) $i
-         set npv_test_value($test_nbr) [acc_fin::qaf_npv $net_period_list [list $i] $intervals_per_year ]
+         set npv_test_value($test_nbr) [acc_fin::npv $net_period_list [list $i] $intervals_per_year ]
 
          if { $test_nbr > 1 } {
              if { [expr {  [qaf_sign $npv_test_value($test_nbr)] * [qaf_sign $npv_test_value($prev_nbr)] } ] < 0 } {
@@ -149,7 +149,7 @@ ad_proc -private acc_fin::qaf_irr {
 
          # second point is arbitrary between first and last within range
          set p1_discount [expr { $p0_discount + $discount_incr } ]
-         set p1_npv [acc_fin::qaf_npv $net_period_list [list $p1_discount] $intervals_per_year ]             
+         set p1_npv [acc_fin::npv $net_period_list [list $p1_discount] $intervals_per_year ]             
          set abs_p1_npv [expr { abs( $p1_npv ) } ]
 
          set dx_discount [expr { abs( $p1_discount - $p0_discount ) } ] 
@@ -174,7 +174,7 @@ ad_proc -private acc_fin::qaf_irr {
              # guess0 using iterative method
 
              set guess0_discount [expr { $p1_discount + $discount_incr } ]
-             set guess0_npv [acc_fin::qaf_npv $net_period_list [list $guess0_discount] $intervals_per_year ]             
+             set guess0_npv [acc_fin::npv $net_period_list [list $guess0_discount] $intervals_per_year ]             
              set abs_guess0_npv [expr { abs( $guess0_npv ) } ]
 
              # best guess using linear interpolation between points  f(guess0_discount) and f(p1_discount)
@@ -187,7 +187,7 @@ ad_proc -private acc_fin::qaf_irr {
                  set yintercept [expr { $guess0_npv - ( $slope * $guess0_discount ) } ]
                  # x = (y - b ) / slope
                  set guess1_discount [expr { ( 0. - $yintercept ) / double($slope) } ]
-                 set guess1_npv [acc_fin::qaf_npv $net_period_list [list $guess1_discount] $intervals_per_year ]             
+                 set guess1_npv [acc_fin::npv $net_period_list [list $guess1_discount] $intervals_per_year ]             
                  set abs_guess1_npv [expr { abs( $guess1_npv ) } ]
              }
 
@@ -232,7 +232,7 @@ ad_proc -private acc_fin::qaf_irr {
      return $irr_list
  }
 
-ad_proc -private acc_fin::qaf_mirr { 
+ad_proc -private acc_fin::mirr { 
     period_cf_list 
     finance_rate
     re_invest_rate
@@ -253,13 +253,13 @@ ad_proc -private acc_fin::qaf_mirr {
              lappend negative_cf_list $period_cf
          }
      }
-     set pv [acc_fin::qaf_npv $negative_cf_list [list $finance_rate] $intervals_per_year]
-     set fv [acc_fin::qaf_fvsimple $positive_cf_list $re_invest_rate $intervals_per_year]
+     set pv [acc_fin::npv $negative_cf_list [list $finance_rate] $intervals_per_year]
+     set fv [acc_fin::fvsimple $positive_cf_list $re_invest_rate $intervals_per_year]
      set mirr [expr { pow( ( -1. * $fv ) / double( $pv ), 1. / ( double( $period_count ) -1. ) ) - 1. } ]
      return $mirr
  }
 
-ad_proc -private acc_fin::qaf_loan_payment { 
+ad_proc -private acc_fin::loan_payment { 
     principal
     annual_interest_rate
     intervals_per_year
@@ -274,7 +274,7 @@ ad_proc -private acc_fin::qaf_loan_payment {
      return $regular_payment
  }
 
-ad_proc -private acc_fin::qaf_loan_apr { 
+ad_proc -private acc_fin::loan_apr { 
     annual_interest_rate
     intervals_per_year
  } {
@@ -286,7 +286,7 @@ ad_proc -private acc_fin::qaf_loan_apr {
      return $apr
  }
 
-ad_proc -private acc_fin::qaf_compound_interest { 
+ad_proc -private acc_fin::compound_interest { 
     principal
     annual_interest_rate
     intervals_per_year
@@ -299,7 +299,7 @@ ad_proc -private acc_fin::qaf_compound_interest {
      return $principal_and_interest
  }
 
-ad_proc -private acc_fin::qaf_loan_model { 
+ad_proc -private acc_fin::loan_model { 
     principal
     annual_interest_rate
     intervals_per_year
@@ -314,7 +314,7 @@ ad_proc -private acc_fin::qaf_loan_model {
      Returns elements of query in list pairs of period number provided. Period 0 is before loan begins. Use "summary" to return summary accumulations. "all" to return all data as ordered list of lists; first list containing data names. 
  } {
      if { $payments eq "" } {
-         set payment [acc_fin::qaf_loan_payment $principal $annual_interest_rate $intervals_per_year $years]
+         set payment [acc_fin::loan_payment $principal $annual_interest_rate $intervals_per_year $years]
          set payments [list $payment $payment]
      }
      # convert payments to a list, in case it was supplied as a scalar
@@ -391,7 +391,7 @@ ad_proc -private acc_fin::qaf_loan_model {
      return $query_report_list
  }
 
-ad_proc -private acc_fin::qaf_depreciation_schedule { 
+ad_proc -private acc_fin::depreciation_schedule { 
     depreciation_type
     original_cost
     {scrap_value ""}
@@ -399,18 +399,18 @@ ad_proc -private acc_fin::qaf_depreciation_schedule {
     {units_of_activity ""}
     {units_done ""}
 } {
-    Returns list of depreciation expenses
+    Returns list of depreciation expenses.
     see: http://en.wikipedia.org/wiki/Depreciation
-    depreciation_type must be one of (number or name works)
+    depreciation_type must be one of (number or name works):
       1,straight-line, 
       2,declining-balance,
       3,sum-of-years-digits,
       4,units-of-production,
-      5,macrs-modified-bonus
-    original cost = cost of fixed asset
-    scrap value = residual value
-    units of activity = life of asset, service etc (number of years, total units expected produced in duration of tool life, expected total milleage of a vehicle's life etc)
-    units done = number of units produced, amount of miles driven etc.
+      5,macrs-modified-bonus. 
+    original_cost = cost of fixed asset.
+    scrap_value = residual value.
+    units_of_activity = life of asset or service etc (number of years, total units expected produced in duration of tool life, expected total milleage of a vehicle's life etc).
+    units_done = number of units produced, amount of miles driven etc.
     The various depreciations are referenced from one function so that multiple depreciation scenarios can be easily referenced within model variations.
 } {
     set depreciation_list [list]
@@ -505,12 +505,13 @@ ad_proc -private acc_fin::qaf_depreciation_schedule {
                 }
             }
         }
-            
-        -- {
+        
+        
+        default {
             lappend depreciation_list "ERROR undefined depreciation_type"
         } 
 
-        return $depreciation_list
     }
+    return $depreciation_list
 }
 
