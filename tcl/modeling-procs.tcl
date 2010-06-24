@@ -39,6 +39,115 @@ ad_proc -public qaf_sign {
     return $sign
 }
 
+ad_proc -public acc_fin::list_index {
+    list_of_values
+    index_ref
+    {default_value "0"}
+} {
+    Returns the value of the list at index_ref where the first value is 0. If the reference is not valid or out of range, returns the default value ( 0 by default), or the last value of the list if default is blank.
+} {
+
+    set max_index [llength $list_of_values]
+    if { $max_index > 1 } {
+        set values_list $list_of_values
+     } else {
+         set values_list [split $list_of_values]
+     }
+     set values_list_count [llength $values_list]
+    if { $index_ref > -1 && $index_ref < $values_list_count } {
+        set return_value [lindex $values_list $index_ref]
+    } elseif { [string length $default_value] > 0 } {
+        set return_value $default_value
+    } else {
+        set return_value [lindex $values_list end]
+    }
+} 
+
+ad_proc -public acc_fin::list_indexes {
+    list_of_values
+    list_of_indexes
+    {default_value "0"}
+} {
+    Returns a list of  values of the list_of_values for each index in list_of_indexes.  The first value is at index  0. If an index reference is not valid or out of range, returns the default value ( 0 by default), or the last value of the list_of_values if default is blank.
+} {
+
+    if { [llength $list_of_values] > 1 } {
+        set values_list $list_of_values
+    } else {
+        set values_list [split $list_of_values]
+    }
+    set values_list_count [llength $values_list]
+    
+    if { [llength $list_of_indexes] > 1 } {
+        set indexes_list $list_of_indexes
+    } else {
+        set indexes_list [split $list_of_indexes]
+    }
+    set indexes_list_count [llength $indexes_list]
+    
+    set new_list_of_values [list]
+    foreach index $list_of_indexes {
+        lappend new_list_of_values [acc_fin::list_index $list_of_values $index $default_value]
+    }
+    return $new_list_of_values
+} 
+
+ad_proc -public acc_fin::list_sorted_indexes {
+    list_of_values 
+    {sort_type "-real"}
+} {
+    Returns a list of indexes of the list_of_values that puts the list_of_values in sorted order. This is useful for reports, where the same sort needs to be applied on multiple lists. This output, when supplied to list_indexes, returns a list of sorted values. see tcl lsort for sort_type options.
+} {
+    if { [llength $list_of_values] > 1 } {
+        set values_list $list_of_values
+    } else {
+        set values_list [split $list_of_values]
+    }
+    set values_list_count [llength $values_list]
+    set values_sorted_list [lsort $sort_type $values_list]
+    set index_sorted_list [list]
+    foreach value $values_sorted_list {
+        set propose_index [lsearch -exact $values_list $value]
+        while { [lsearch -exact $propose_index $index_sorted_list] > -1 } {
+            incr propose_index
+            set propose_index [lsearch -exact -start $propose_index  $values_list $value]
+        }
+        lappend index_sorted_list $propose_index
+    }
+    return $index_sorted_list
+}
+
+ad_proc -public acc_fin::list_summary_indexes {
+    list_of_values
+} {
+    Returns a list of indexes of the list_of_values, where only the last value in a sequence of same numbers is used. This is useful for identifying  end_of_period iterations in a list where multiple iterations occur within the same period. For example, in a list of years, year "10" may be for iterations 120 through 131 when iterated monthly. For this example, the value 131 is returned for this year as the last in the index for that year. A second value for "10" is added, if "10" appears in a sequence later in the list. 
+} {
+    if { [llength $list_of_values] > 1 } {
+        set values_list $list_of_values
+    } else {
+        set values_list [split $list_of_values]
+    }
+    set values_list_count [llength $values_list]
+    set indexes_unique_list [list]
+    if { $values_list_count > 1 } {
+        set last_value [lindex $values_list 0]
+        for {set index 1} {$index < $values_list_count } { incr index 1} {
+            set last_index [expr $index - 1]
+            set value [lindex $values_list $index]
+            if { $value ne $last_value && $last_index > -1  } {
+                lappend indexes_unique_list $last_index
+            }
+            set last_value $value
+        }
+        lappend indexes_unique_list $index
+        
+    } elseif { $values_list_count == 1 } {
+       lappend indexes_unique_list 0
+    }
+    return $indexes_unique_list
+}
+
+
 ad_proc -public acc_fin::inflation_factor {
     annual_inflation_rate
     intervals_per_year
@@ -113,36 +222,52 @@ periods_per_year = 12
 energy_production_annual = 44570000.  -- kWh/kW  or kWh annual energy output per rated kW
 energy_output_cert_annual = 43288918. -- kWh/kW
 forecast_peak_power = 2298.01 -- hours (was base_sys_perf)
-annual_system_degredation = 0.005  -- percent as decimal
-system_power_output_peak = 19395. -- kW
+annual_system_degredation = 0.005  -- % as decimal
+system_power_output_peak = 19395. -- kW (was annu_sys_output)
 sys_output_period = 0 -- kWh
 
 ppa_rate = .2 -- $/kWh
-ppa_escalation = .025 -- percent as decimal (factor)
+ppa_escalation = .025 -- % as decimal (factor)
 power_revenue_period = 0 -- $  (was  direct_income)
 
 
+system_cost_installed = 127827380.17 -- $
+operations_rate_annual = 27.918 -- $/kW/yr
+inflation_rate = .02252 -- % as decimal, annual
+
+
 \#
-period = i + 1
-periods_per_year = periods_per_year
-year = int( ( ( i +  periods_per_year ) / periods_per_year ) ) 
-next_year = year.i + 1
-prev_year = year.i - 1
-
-sys_output_period = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; 
-power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i )
-
+-- constants --
 forecast_peak_power = forecast_peak_power
 system_power_output_peak = system_power_output_peak
 annual_system_degredation = annual_system_degredation
 ppa_rate = ppa_rate
 ppa_escalation = ppa_escalation
+operations_rate_annual = operations_rate_annual
+inflation_rate = inflation_rate
+system_cost_installed = system_cost_installed
+periods_per_year = periods_per_year
+
+-- incremental --
+period = i + 1
+year = int( ( ( i +  periods_per_year ) / periods_per_year ) ) 
+next_year = year.i + 1
+prev_year = year.i - 1
+
+-- iterative calculations --
+sys_output_period = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; 
+power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i )
+income_taxable_period = power_revenue_period.i -- plus  incentives etc if any
+expense_operations = operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year
+expense_deductable_period = expense_operations.i -- inflows are positive, outflows negative
+net_taxable = income_taxable_period.i - expense_deductable_period.i
+depreciation_sched = acc_fin::depreciation_schedule 5 system_cost_installed ;  -- MACRS modified bonus
+
 \#
-i period next_year year sys_output_period power_revenue_period
+i period next_year year sys_output_period power_revenue_period income_taxable_period expense_deductable_period
 \# 
 sum_periods = f::sum \$i_list ;
 sum_years = f::sum \$year_list ;
-sum_next_years = f::sum \$next_year_list ;
 "
 
     }
