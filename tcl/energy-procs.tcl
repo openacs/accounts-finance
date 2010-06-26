@@ -5,6 +5,8 @@ ad_library {
     @cvs-id $Id:
 }
 
+namespace eval acc_fin {}
+
 ad_proc -public acc_fin::energy_output {
     base_system_performance
     peak_power_output
