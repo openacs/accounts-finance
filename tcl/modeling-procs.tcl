@@ -39,6 +39,25 @@ ad_proc -public qaf_sign {
     return $sign
 }
 
+ad_proc -public acc_fin::list_set {
+    list_of_values
+    {delimiter " "}
+} {
+    Returns a list_of_values in tcl list format. This allows the model to use tcl list without complicating permissions.
+} {
+    if { [string length $delimiter] == 0} {
+        set delimiter " "
+    }
+    set max_index [llength $list_of_values]
+    if { $max_index > 1 } {
+        set values_list $list_of_values
+     } else {
+         set values_list [split $list_of_values $delimiter]
+     }
+    return $list_of_values
+} 
+
+
 ad_proc -public acc_fin::list_index {
     list_of_values
     index_ref
@@ -219,6 +238,7 @@ o7000_other_tracking = 0
 o7010_EBITDA = 0
 periods_per_year = 12
 
+
 energy_production_annual = 44570000.  -- kWh/kW  or kWh annual energy output per rated kW
 energy_output_cert_annual = 43288918. -- kWh/kW
 forecast_peak_power = 2298.01 -- hours (was base_sys_perf)
@@ -230,10 +250,34 @@ ppa_rate = .2 -- $/kWh
 ppa_escalation = .025 -- % as decimal (factor)
 power_revenue_period = 0 -- $  (was  direct_income)
 
+equipment_costs = 107894187.0
+capital_costs_installed = 117445809.11 -- $ (hard costs: equipment + fees)
+other_costs = 10381571.06 -- $ (soft costs: shipping, construction/developer fees + insurance + operations during construction etc.)
+system_cost_installed = capital_costs_installed + other_costs
 
-system_cost_installed = 127827380.17 -- $
+loan_principal_initial = 60601000
+loan_interest_rate_annual = .07 -- % as decimal, compounded each period
+loan_interest_rate_period = loan_interest_rate_annual / periods_per_year
+loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
+loan_years = 18
+loan_payment = acc_fin::loan_payment loan_principal_initial loan_interest_rate_annual periods_per_year loan_years ;
+period_loan_begins = 1
+
+equity_investment_initial = 30640000
+equity_discount_rate_annual = .08 -- % as decimal, compounded each period
+equity_discount_rate_period = equity_discount_rate_annual / periods_per_year
+equity_as_loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
+period_equity_invest_begins = 1
+
 operations_rate_annual = 27.918 -- $/kW/yr
 inflation_rate = .02252 -- % as decimal, annual
+depreciation_annual = acc_fin::list_set \".6 .16 .096 .0576 .0576 .0288 0.\" ;
+depreciation_basis = system_cost_installed * 0.85
+
+tax_combined_rate = .4358 -- % expressed as decimal (state + federal)
+incentive_us_itc = .3 * capital_costs_installed
+
+flows_non_taxable_initial = 0 -- this should include any cost of debt of financing during construction (currently pre period 1)
 
 
 \#
@@ -245,8 +289,19 @@ ppa_rate = ppa_rate
 ppa_escalation = ppa_escalation
 operations_rate_annual = operations_rate_annual
 inflation_rate = inflation_rate
+tax_combined_rate = tax_combined_rate
 system_cost_installed = system_cost_installed
 periods_per_year = periods_per_year
+depreciation_annual = depreciation_annual
+depreciation_basis = depreciation_basis
+loan_payment = loan_payment
+loan_interest_rate_period = loan_interest_rate_period
+period_loan_begins = period_loan_begins
+equity_investment_initial = equity_investment_initial
+incentive_us_itc = incentive_us_itc
+equity_interest_rate_period = equity_interest_rate_period
+loan_principal_initial = loan_principal_initial
+period_equity_invest_begins = period_equity_invest_begins
 
 -- incremental --
 period = i + 1
@@ -257,11 +312,41 @@ prev_year = year.i - 1
 -- iterative calculations --
 sys_output_period = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; 
 power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i )
-income_taxable_period = power_revenue_period.i -- plus  incentives etc if any
+
+income_taxable_period = power_revenue_period.i -- plus taxable incentives etc if any
 expense_operations = operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year
 expense_deductable_period = expense_operations.i -- inflows are positive, outflows negative
 net_taxable = income_taxable_period.i - expense_deductable_period.i
-depreciation_sched = acc_fin::depreciation_schedule 5 system_cost_installed ;  -- MACRS modified bonus
+
+depreciation_period = acc_fin::list_index depreciation_annual year.i ; * depreciation_basis / periods_per_year
+EBT_period = net_taxable.i - depreciation_period.i -- includes depreciation calculation
+tax_period = ( EBT_period.i > 0 ) * EBT_period.i * tax_combined_rate
+incentives_period = ( i == 1 ) * equity_investment_initial  + ( i == 3 ) * incentive_us_itc
+
+loan_payment_period = ( loan_balance > loan_payment ) * loan_payment + ( loan_balance > 0 && loan_balance < loan_payment ) * loan_balance
+loan_interest_period = loan_balance * loan_interest_rate_period
+
+
+equity_interest_period = equity_debt_balance * equity_interest_rate_period
+cost_of_finance_period = loan_interest_period.i * ( 1 - tax_combined_rate )
+cost_of_equity_debt_period = equity_interest_period.i * (1 - tax_combined_rate )
+cost_of_debt_period = cost_of_finance_period.i + cost_of_equity_debt_period.i
+
+
+flows_non_taxable_period = cost_of_equity_debt_period.i + cost_of_debt_period.i  
+
+net_cashflow_pre_tax = net_taxable.i + incentives_period.i + flows_non_taxable_period.i
+net_cashflow_after_tax = net_cashflow_pre_tax.i - tax_period.i
+
+loan_payment_principal_period = loan_payment_period.i - loan_interest_period.i
+loan_payment_principal_period = f::max loan_payment_principal_period.i 0 ;
+
+free_cashflow_available = net_cashflow_after_tax.i - loan_payment_principal_period.i -- after debt payment
+free_cashflow_gt_equity_debt = ( free_cashflow_available.i > equity_debt_balance ) 
+equity_payment_period = ( free_cashflow_gt_equity_debt.i == 0 ) * free_cashflow_available.i + ( free_cashflow_gt_equity_debt.i ) * equity_debt_balance
+
+loan_balance = loan_balance - loan_payment_period.i + loan_interest_period.i + ( period_loan_begins == i ) * loan_principal_initial
+equity_debt_balance = equity_debt_balance - equity_payment_period.i + equity_interest_period.i + ( period_equity_invest_begins == i ) * equity_investment_initial
 
 \#
 i period next_year year sys_output_period power_revenue_period income_taxable_period expense_deductable_period
@@ -407,6 +492,12 @@ ad_proc -private acc_fin::model_compute {
                     regsub -- $_varname $_calc_line "${_varname}_arr(0)" _calc_line
                     # and on right side
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr(0) } _calc_line
+                    # do this twice to catch stragglers since spaces may be delimiters for both sides
+                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr(0) } _calc_line
+                    regsub -nocase -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
+                        regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
+                    regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
+                        regsub -all -- { f::} $_calc_line { [f::} _calc_line
                     # make all numbers double precision
                     regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
 
@@ -435,7 +526,7 @@ ad_proc -private acc_fin::model_compute {
                     regsub -nocase -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
                         regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
                     regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
-
+                        regsub -all -- { f::} $_calc_line { [f::} _calc_line
                     # make all numbers double precision
                     regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
 
