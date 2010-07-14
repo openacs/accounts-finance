@@ -7,6 +7,108 @@ ad_library {
 
 namespace eval acc_fin {}
 
+ad_proc -public qaf_tcl_list_of_lists_to_html_table {
+    tcl_list_of_lists
+    {formatting_list ""}
+    {first_are_titles "0"}
+    {watch_print_row "1"}
+    {separate_uniques "1"}
+} {
+    returns an html table where each cell is an item from a tcl list of lists, where 
+    the first item of each list is the first row, the second item of each list is the second row etc etc.
+    the table has the same number of rows as the maximum count of list items, and
+    the same number of columns as there are lists.  Lists with too few list items are filled with empty cells.
+    Converts first row to titles if first_are_title is true (1).
+    If watch_print_row is 1, and the first item in one of the lists is "print_row", the column will not be printed and subsequent rows where the value of column print_row is 0 will be ignored.
+    Formatting_list items are tcl format specifications applied to the values in the cooresponding tcl_list_of_list columns, one spec per column.
+    If separate_uniques is true, columns that have only 1 row are presented as a separate table, oriented as a column of values
+} {
+    set columns_count [llength $tcl_list_of_lists]
+    set formatting_p [expr { [llength $formatting_list] == $columns_count } ]
+
+    set column_to_hide -1
+    set rows_count 0
+    set column_number 0
+    foreach column_list $tcl_list_of_lists {
+        set row_count($column_number) [llength $column_list]
+        set true_column($column_number) [expr { ( ( $separate_uniques && $row_count($column_number) > 2 ) || $separate_uniques != 1 ) } ]
+        set rows_count [expr { [f::max $rows_count $row_count($column_number) ] } ]
+        if { $watch_print_row } {
+            if { [lindex $column_list 0] eq "print_row" } {
+                set column_to_hide $column_number
+            }
+        }
+        if { $formatting_p } {
+            set format_spec($column_number) [lindex $formatting_list $column_number]
+        }
+        incr column_number
+    }
+
+    set table_html "<table border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n"
+    if { $first_are_titles } {
+        set cell_tag "th"
+    } else {
+        set cell_tag "td"
+    }
+
+    for {set row_index 0} { $row_index < $rows_count } { incr row_index 1 } {
+
+        # check to see if we should be ignoring this row
+        if { $column_to_hide == -1 || ($column_to_hide > -1 && [expr { round( [lindex [lindex $tcl_list_of_lists $column_to_hide ] $row_index] ) } ] != 0 ) } {
+            # process row
+            set row_html "<tr>"
+            set format_row_p [expr { ( $first_are_titles != 0 && $row_index > 0 ) || ( $first_are_titles == 0 ) } ]
+            for {set column_index 0} { $column_index < $columns_count } { incr column_index 1 } {
+                if { $column_index != $column_to_hide && $true_column($column_index) } {
+                    # process this column / cell
+                    set cell_value [lindex [lindex $tcl_list_of_lists $column_index ] $row_index]
+                    if { $formatting_p && $format_row_p } {
+                        if { [catch { set cell_value [format $format_spec($column_index) $cell_value] } result_msg] } {
+                            set cell_value "format error(spec,value): $format_spec(${column_index}) ${cell_value}"
+                        } 
+                    } 
+                    set cell_html "<${cell_tag}>${cell_value}</${cell_tag}>"
+                    append row_html $cell_html
+                }
+            }
+            append row_html "</tr>\n"
+            append table_html $row_html
+        } else {
+            append table_html "<tr><td colspan=\"$columns_count\">(blank row ${row_index})</td></tr>"
+        }
+        # next row
+        set cell_tag "td"
+    }
+
+    append table_html "</table>\n"
+    # now we handle the data with unique (only one value) in a column
+
+
+    set table_2_html "<table border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n"
+    set row_html ""
+    set format_row_p [expr { ( $first_are_titles != 0 && $row_index > 0 ) || ( $first_are_titles == 0 ) } ]
+    for {set column_index 0} { $column_index < $columns_count } { incr column_index 1 } {
+        if { $column_index != $column_to_hide && $true_column($column_index) == 0 } {
+            # process this column / cell
+            set cell_heading [lindex [lindex $tcl_list_of_lists $column_index ] 0]
+            set cell_value [lindex [lindex $tcl_list_of_lists $column_index ] 1]
+            if { $formatting_p && $format_row_p } {
+                if { [catch { set cell_value [format $format_spec($column_index) $cell_value] } result_msg] } {
+                    set cell_value "format error(spec,value): $format_spec(${column_index}) ${cell_value}"
+                } 
+            } 
+            set cell_html "<tr><td>${cell_heading}</td><td>${cell_value}</td></tr>"
+            append row_html $cell_html
+        }
+    }
+    append table_2_html $row_html
+    append table_2_html "</table>"
+
+    append table_2_html $table_html
+
+    return $table_2_html
+} 
+
 ad_proc -public qaf_fp {
     number
 } {
@@ -65,7 +167,7 @@ ad_proc -public acc_fin::list_index {
 } {
     Returns the value of the list at index_ref where the first value is 0. If the reference is not valid or out of range, returns the default value ( 0 by default), or the last value of the list if default is blank.
 } {
-
+    set index_ref [expr { round( $index_ref ) } ]
     set max_index [llength $list_of_values]
     if { $max_index > 1 } {
         set values_list $list_of_values
@@ -238,13 +340,17 @@ o7000_other_tracking = 0
 o7010_EBITDA = 0
 periods_per_year = 12
 
-
 energy_production_annual = 44570000.  -- kWh/kW  or kWh annual energy output per rated kW
 energy_output_cert_annual = 43288918. -- kWh/kW
 forecast_peak_power = 2298.01 -- hours (was base_sys_perf)
 annual_system_degredation = 0.005  -- % as decimal
 system_power_output_peak = 19395. -- kW (was annu_sys_output)
 sys_output_period = 0 -- kWh
+production_begins = 24 -- period 24 is when production begins ie. period 1
+period =  -1 * production_begins + 1 
+year = floor( ( ( period + periods_per_year - production_begins ) / periods_per_year ) ) 
+next_year = year + 1
+prev_year = year - 1
 
 ppa_rate = .2 -- $/kWh
 ppa_escalation = .025 -- % as decimal (factor)
@@ -255,19 +361,33 @@ capital_costs_installed = 117445809.11 -- $ (hard costs: equipment + fees)
 other_costs = 10381571.06 -- $ (soft costs: shipping, construction/developer fees + insurance + operations during construction etc.)
 system_cost_installed = capital_costs_installed + other_costs
 
-loan_principal_initial = 60601000
+capital_expense_payout_sched = acc_fin::list_set \".1 .1 .05 .06 .05 .05 .05 .2 .34\" ; --multiply this by system_ost_installed for dollar amounts
+captial_expenses_begin = production_begins - 8 -- that is 23 - 8, given the 23 periods for construction prior to operation
+direct_labor_expense_fixed_sched = acc_fin::list_set \"15166.67 15166.67 15166.667\" ;
+direct_labor_expenses_begin = production_begins - 2
+direct_labor_expense_var_sched = acc_fin::list_set \"0 0\" ; -- variable
+direct_labor_expenses_begin = production_begins - 2
+land_use_oper_cost_sched = acc_fin::list_set \"11385. 11385. 11385.\" ; -- operating costs
+land_use_oper_cost_begin = production_begins - 2
+commissions_pmnt_sched = acc_fin::list_set \"0 0\" ;
+commissions_pmnt_begin = production_begins
+
+loan_principal_initial = 0 -- $
 loan_interest_rate_annual = .07 -- % as decimal, compounded each period
 loan_interest_rate_period = loan_interest_rate_annual / periods_per_year
 loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
 loan_years = 18
 loan_payment = acc_fin::loan_payment loan_principal_initial loan_interest_rate_annual periods_per_year loan_years ;
-period_loan_begins = 1
+period_loan_begins = 12 -- when loan funds become available
+loan_limit = 60601000 -- $
 
+equity_debt_balance = 0 -- should be about: 68404748.86 at period 0
 equity_investment_initial = 30640000
 equity_discount_rate_annual = .08 -- % as decimal, compounded each period
 equity_discount_rate_period = equity_discount_rate_annual / periods_per_year
 equity_as_loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
-period_equity_invest_begins = 1
+period_equity_invest_begins = production_begins -- when the funds become available
+equity_limit =  69900000
 
 operations_rate_annual = 27.918 -- $/kW/yr
 inflation_rate = .02252 -- % as decimal, annual
@@ -277,7 +397,7 @@ depreciation_basis = system_cost_installed * 0.85
 tax_combined_rate = .4358 -- % expressed as decimal (state + federal)
 incentive_us_itc = .3 * capital_costs_installed
 
-flows_non_taxable_initial = 0 -- this should include any cost of debt of financing during construction (currently pre period 1)
+flows_non_taxable_initial = 0 -- this should include any cost of debt of financing during construction, if pre-operation is not iterated in forecast
 
 
 \#
@@ -302,26 +422,36 @@ incentive_us_itc = incentive_us_itc
 equity_interest_rate_period = equity_interest_rate_period
 loan_principal_initial = loan_principal_initial
 period_equity_invest_begins = period_equity_invest_begins
+production_begins = production_begins
 
 -- incremental --
-period = i + 1
-year = int( ( ( i +  periods_per_year ) / periods_per_year ) ) 
-next_year = year.i + 1
-prev_year = year.i - 1
+period = period + 1 
+year = floor( ( ( period.i +  periods_per_year - production_begins  ) / periods_per_year ) ) 
+next_year = round( year.i + 1 )
+prev_year = round( year.i - 1 )
+producing = ( period.i > 0 )
 
 -- iterative calculations --
-sys_output_period = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; 
-power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i )
+Use these two equations if loans are dispersed at one time:
+  -- equity_debt_balance equals equity_debt_balance + ( period_equity_invest_begins == i ) * equity_investment_initial 
+  -- loan_balance equals loan_balance + ( period_loan_begins == i ) * loan_principal_initial
+
+
+sys_output_period = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; * producing
+power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i ) 
 
 income_taxable_period = power_revenue_period.i -- plus taxable incentives etc if any
-expense_operations = operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year
+
+
+
+expense_operations = producing.i * operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year
 expense_deductable_period = expense_operations.i -- inflows are positive, outflows negative
 net_taxable = income_taxable_period.i - expense_deductable_period.i
 
-depreciation_period = acc_fin::list_index depreciation_annual year.i ; * depreciation_basis / periods_per_year
+depreciation_period = producing.i * acc_fin::list_index depreciation_annual year.i ; * depreciation_basis / periods_per_year
 EBT_period = net_taxable.i - depreciation_period.i -- includes depreciation calculation
 tax_period = ( EBT_period.i > 0 ) * EBT_period.i * tax_combined_rate
-incentives_period = ( i == 1 ) * equity_investment_initial  + ( i == 3 ) * incentive_us_itc
+incentives_period = ( period.i == 1 ) * equity_investment_initial  + ( period.i == 3 ) * incentive_us_itc
 
 loan_payment_period = ( loan_balance > loan_payment ) * loan_payment + ( loan_balance > 0 && loan_balance < loan_payment ) * loan_balance
 loan_interest_period = loan_balance * loan_interest_rate_period
@@ -345,11 +475,11 @@ free_cashflow_available = net_cashflow_after_tax.i - loan_payment_principal_peri
 free_cashflow_gt_equity_debt = ( free_cashflow_available.i > equity_debt_balance ) 
 equity_payment_period = ( free_cashflow_gt_equity_debt.i == 0 ) * free_cashflow_available.i + ( free_cashflow_gt_equity_debt.i ) * equity_debt_balance
 
-loan_balance = loan_balance - loan_payment_period.i + loan_interest_period.i + ( period_loan_begins == i ) * loan_principal_initial
-equity_debt_balance = equity_debt_balance - equity_payment_period.i + equity_interest_period.i + ( period_equity_invest_begins == i ) * equity_investment_initial
+loan_balance = loan_balance - loan_payment_period.i + loan_interest_period.i 
+equity_debt_balance = equity_debt_balance - equity_payment_period.i + equity_interest_period.i
 
 \#
-i period next_year year sys_output_period power_revenue_period income_taxable_period expense_deductable_period
+i period prev_year year next_year sys_output_period power_revenue_period income_taxable_period expense_operations expense_deductable_period net_taxable depreciation_period EBT_period tax_period incentives_period loan_payment_period equity_interest_period cost_of_finance_period cost_of_equity_debt_period cost_of_debt_period flows_non_taxable_period net_cashflow_pre_tax net_cashflow_after_tax loan_payment_principal_period free_cashflow_available free_cashflow_gt_equity_debt equity_payment_period loan_balance equity_debt_balance
 \# 
 sum_periods = f::sum \$i_list ;
 sum_years = f::sum \$year_list ;
@@ -462,15 +592,15 @@ ad_proc -private acc_fin::model_compute {
                 set _section_list [split $_model_section \n\r]
                 set _new_section_list [list]
                 foreach _calc_line $_section_list {
+                    set comment_start [string first " --" $_calc_line]
+                    if { $comment_start > 0 } {
+                        set _calc_line [string range $_calc_line 0 $comment_start]
+                    }
                     if { ![regsub -- {=} $_calc_line "\[expr \{ " _calc_line] } {
                         append _err_text "'${_calc_line}' ignored. No equal sign found.\n"
                         incr _err_state
                         set _calc_line ""
                     } else {
-                        set comment_start [string first " --" $_calc_line]
-                        if { $comment_start > 0 } {
-                            set _calc_line [string range $_calc_line 0 $comment_start]
-                        }
                         set _calc_line "set ${_calc_line} \} \]"
                         set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
                         regsub {[ ][ ]+} $_calc_line { } _calc_line
@@ -487,6 +617,10 @@ ad_proc -private acc_fin::model_compute {
             if { $_section_count eq 1 } {
                 set _new_section_list [list]
                 foreach _calc_line $_section_list {
+                    set comment_start [string first " --" $_calc_line]
+                    if { $comment_start > 0 } {
+                        set _calc_line [string range $_calc_line 0 $comment_start]
+                    }
                     # substitute var_arr(0) for variables on left side
                     set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
                     regsub -- $_varname $_calc_line "${_varname}_arr(0)" _calc_line
@@ -495,9 +629,9 @@ ad_proc -private acc_fin::model_compute {
                     # do this twice to catch stragglers since spaces may be delimiters for both sides
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr(0) } _calc_line
                     regsub -nocase -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
-                        regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
+                    regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
                     regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
-                        regsub -all -- { f::} $_calc_line { [f::} _calc_line
+                    regsub -all -- { f::} $_calc_line { [f::} _calc_line
                     # make all numbers double precision
                     regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
 
@@ -510,26 +644,37 @@ ad_proc -private acc_fin::model_compute {
                 set _section_list $_new_section_list
             }
 
+
             if { $_section_count eq 2 } {
+
                 set _new_section_list [list]
                 foreach _calc_line $_section_list {
+                    set comment_start [string first " --" $_calc_line]
+                    if { $comment_start > 0 } {
+                        set _calc_line [string range $_calc_line 0 $comment_start]
+                    }
+
                     # substitute var_arr($_i) for variables on left side
+                    set _original_calc_line $_calc_line
                     set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
-                    regsub -- $_varname $_calc_line "${_varname}_arr(\$_i)" _calc_line
-
-                    # substitute var_arr($_h) for variables on right side
-                    # for each string found not an array or within paraenthesis, 
-                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
-                    # do this twice to catch stragglers since spaces may be delimiters for both sides
-                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
-                    regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[\.][i][ ]} $_calc_line { $\1_arr($_i) } _calc_line
-                    regsub -nocase -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
+                    if { [catch {
+                        regsub -- $_varname $_calc_line "${_varname}_arr(\$_i)" _calc_line 
+                        # substitute var_arr($_h) for variables on right side
+                        # for each string found not an array or within paraenthesis, 
+                        regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
+                        # do this twice to catch stragglers since spaces may be delimiters for both sides
+                        regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
+                        regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[\.][i][ ]} $_calc_line { $\1_arr($_i) } _calc_line
+                        regsub -nocase -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
                         regsub -nocase -all -- { ;} $_calc_line { ] } _calc_line
-                    regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
+                        regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
                         regsub -all -- { f::} $_calc_line { [f::} _calc_line
-                    # make all numbers double precision
-                    regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
-
+                        # make all numbers double precision
+                        regsub -nocase -all -- {[ ]([0-9]+)[ ]} $_calc_line { \1. } _calc_line
+                        } _error_text]} {
+                            lappend _err_text "ERROR compiling line: ${_original_calc_line} MESSAGE: ${_error_text}"
+                            incr _err_state
+                        }
                     if { [string length $_calc_line ] > 0 } { 
                         regsub {[ ][ ]+} $_calc_line { } _calc_line
                         lappend _new_section_list $_calc_line
@@ -537,8 +682,6 @@ ad_proc -private acc_fin::model_compute {
                 }
                 set _section_list $_new_section_list
             }
-
-
 
             if { $_section_count eq 3 } {
                 set _section_list [split $_model_section \n\r\ \,]
@@ -568,9 +711,9 @@ ad_proc -private acc_fin::model_compute {
                     } else {
                         set _calc_line "set ${_calc_line} \} \]"
                         regsub -all -- { f::} $_calc_line { [f::} _calc_line
-                            regsub -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
-                                regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
-                                    regsub -all -- { ;} $_calc_line { ] } _calc_line
+                        regsub -all -- { acc_fin::([a-z])} $_calc_line { [acc_fin::\1} _calc_line
+                        regsub -all -- { qaf_([a-z])} $_calc_line { [qaf_\1} _calc_line
+                        regsub -all -- { ;} $_calc_line { ] } _calc_line
                         regsub {[ ][ ]+} $_calc_line { } _calc_line
                         lappend _new_section_list $_calc_line
                     }
@@ -578,21 +721,19 @@ ad_proc -private acc_fin::model_compute {
                 set _section_list $_new_section_list
             }
             lappend _new_model_sections_list $_section_list
-        } 
-        set _model_sections_list $_new_model_sections_list
-        #  compiled model as list of lists
-
-    } else {
-        set _output [linsert $_model_sections_list 0 [list "ERRORS: ${_err_text}" ${_err_state}] ]
-        ns_log Notice "acc_fin::model_compute compile end --with errors"
-        return $_output
-    }
+                } 
+                set _model_sections_list $_new_model_sections_list
+            } else {
+                set _output [linsert $_model_sections_list 0 [list "ERRORS: ${_err_text}" ${_err_state}] ]
+                ns_log Notice "acc_fin::model_compute compile end --with errors"
+                return $_output
+            }
 
 #compute $_model_sections_list
     # 0 iterations = compile only, do not compute
     if { $_number_of_iterations == 0 } {
         ns_log Notice "acc_fin::model_compute compile end"
-        set _output [linsert $_model_sections_list 0 [list "ERRORS" 0]]
+        set _output [linsert $_model_sections_list 0 [list "ERRORS" $_err_state]]
         return $_output
     }
 
