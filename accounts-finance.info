@@ -8,7 +8,7 @@
     <singleton-p>f</singleton-p>
     
     <version name="0.1d" url="http://openacs.org/repository/download/apm/accounts-finance-0.1d.apm">
-        <owner url="mailto:torben@dekka.com">Torben Brosten</owner>
+        <owner url="mailto:kappa@dekka.com">Benjamin Brink</owner>
         <owner url="http://openacs.org">OpenACS community</owner>
         <summary>Finance package provides limited set of tools for long-term debts, fixed assets, forecasting.</summary>
         <vendor url="http://dekka.com">Dekka Corp of Oregon</vendor>
