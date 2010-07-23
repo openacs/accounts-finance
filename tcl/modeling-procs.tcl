@@ -348,7 +348,7 @@ system_power_output_peak = 19395. -- kW (was annu_sys_output)
 sys_output_period = 0 -- kWh
 production_begins = 24 -- period 24 is when production begins ie. period 1
 period =  -1 * production_begins + 1 
-year = floor( ( ( period + periods_per_year - production_begins ) / periods_per_year ) ) 
+year = floor( ( ( period - production_begins - 1 ) / periods_per_year ) ) 
 next_year = year + 1
 prev_year = year - 1
 
@@ -361,12 +361,12 @@ capital_costs_installed = 117445809.11 -- $ (hard costs: equipment + fees)
 other_costs = 10381571.06 -- $ (soft costs: shipping, construction/developer fees + insurance + operations during construction etc.)
 system_cost_installed = capital_costs_installed + other_costs
 
-capital_expense_payout_sched = acc_fin::list_set \".1 .1 .05 .06 .05 .05 .05 .2 .34\" ; --multiply this by system_ost_installed for dollar amounts
-captial_expenses_begin = production_begins - 8 -- that is 23 - 8, given the 23 periods for construction prior to operation
+capital_expense_payout_sched = acc_fin::list_set \".1 .1 .05 .06 .05 .05 .05 .2 .34\" ; --multiply this by system_cost_installed for dollar amounts
+capital_expenses_begin = production_begins - 8 -- that is 23 - 8, given the 23 periods for construction prior to operation
 direct_labor_expense_fixed_sched = acc_fin::list_set \"15166.67 15166.67 15166.667\" ;
 direct_labor_expenses_begin = production_begins - 2
 direct_labor_expense_var_sched = acc_fin::list_set \"0 0\" ; -- variable
-direct_labor_expenses_begin = production_begins - 2
+direct_labor_expenses_var_begin = production_begins - 2
 land_use_oper_cost_sched = acc_fin::list_set \"11385. 11385. 11385.\" ; -- operating costs
 land_use_oper_cost_begin = production_begins - 2
 commissions_pmnt_sched = acc_fin::list_set \"0 0\" ;
@@ -387,7 +387,7 @@ equity_discount_rate_annual = .08 -- % as decimal, compounded each period
 equity_discount_rate_period = equity_discount_rate_annual / periods_per_year
 equity_as_loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
 period_equity_invest_begins = production_begins -- when the funds become available
-equity_limit =  69900000
+equity_limit =  69900000 -- $
 
 operations_rate_annual = 27.918 -- $/kW/yr
 inflation_rate = .02252 -- % as decimal, annual
@@ -398,7 +398,7 @@ tax_combined_rate = .4358 -- % expressed as decimal (state + federal)
 incentive_us_itc = .3 * capital_costs_installed
 
 flows_non_taxable_initial = 0 -- this should include any cost of debt of financing during construction, if pre-operation is not iterated in forecast
-
+overage = 0 -- refers to overage of available cash via capital/finances
 
 \#
 -- constants --
@@ -416,17 +416,29 @@ depreciation_annual = depreciation_annual
 depreciation_basis = depreciation_basis
 loan_payment = loan_payment
 loan_interest_rate_period = loan_interest_rate_period
+loan_limit = loan_limit
 period_loan_begins = period_loan_begins
 equity_investment_initial = equity_investment_initial
 incentive_us_itc = incentive_us_itc
 equity_interest_rate_period = equity_interest_rate_period
+equity_limit = equity_limit
 loan_principal_initial = loan_principal_initial
 period_equity_invest_begins = period_equity_invest_begins
 production_begins = production_begins
+capital_expenses_begin = capital_expenses_begin
+direct_labor_expenses_begin = direct_labor_expenses_begin
+direct_labor_var_expenses_begin = direct_labor_var_expenses_begin
+land_use_oper_cost_begin = land_use_oper_cost_begin
+commissions_pmnt_begin = commissions_pmnt_begin
+capital_expense_payout_sched = capital_expense_payout_sched
+direct_labor_expense_fixed_sched = direct_labor_expense_fixed_sched
+direct_labor_expense_var_sched = direct_labor_expense_var_sched 
+land_use_oper_cost_sched = land_use_oper_cost_sched
+commissions_pmnt_sched = commissions_pmnt_sched
 
 -- incremental --
 period = period + 1 
-year = floor( ( ( period.i +  periods_per_year - production_begins  ) / periods_per_year ) ) 
+year = floor( ( ( period.i +  periods_per_year - 1 ) / periods_per_year ) ) 
 next_year = round( year.i + 1 )
 prev_year = round( year.i - 1 )
 producing = ( period.i > 0 )
@@ -442,9 +454,41 @@ power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation 
 
 income_taxable_period = power_revenue_period.i -- plus taxable incentives etc if any
 
+capital_expense_ref = period.i - capital_expenses_begin
+capital_expense = acc_fin::list_index capital_expense_payout_sched capital_expense_ref.i ; * system_cost_installed
+direct_labor_expense_ref = period.i - direct_labor_expenses_begin
+direct_labor_expense = acc_fin::list_index direct_labor_expense_fixed_sched direct_labor_expense_ref.i ;
+direct_labor_expense_var_ref = period.i - direct_labor_var_expenses_begin
+direct_labor_expense_var = acc_fin::list_index direct_labor_expense_var_sched direct_labor_expense_var_ref.i ;
+land_use_oper_cost_ref = period.i - land_use_oper_cost_begin
+land_use_oper_cost = acc_fin::list_index land_use_oper_cost_sched land_use_oper_cost_ref.i ;
+commissions_pmnt_ref = period.i - commissions_pmnt_begin
+commissions_pmnt = acc_fin::list_index commissions_pmnt_sched commissions_pmnt_ref.i ;
+expense_operations = producing.i * operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year 
 
+free_cashflow_period = power_revenue_period.i - capital_expense.i - expense_operations.i - direct_labor_expense.i - direct_labor_expense_var.i - land_use_oper_cost.i - commissions_pmnt.i
 
-expense_operations = producing.i * operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year
+The strategy for borrowing: first from financing, then from equity.  For modelling purposes, record excess borrowing as a debt_overage.  
+
+debt_loan_available = loan_limit - loan_balance
+abs_free_cashflow_period = abs( free_cashflow_period.i )  -- is cash required to offset debt when free_cashflow_period.i < 0
+cash_required = abs_free_cashflow_period.i * ( free_cashflow_period.i < 0 )
+debt_payout_needed_q = ( free_cashflow_period.i < 0 ) && ( debt_loan_available.i > 0 )
+debt_payout_loan = debt_payout_needed_q.i * ( ( abs_free_cashflow_period.i  <= debt_loan_available.i ) * abs_free_cashflow_period.i + ( abs_free_cashflow_period.i > debt_loan_available.i ) * debt_loan_available.i )
+loan_balance = loan_balance + debt_payout_loan.i
+
+cash_required = cash_required.i - debt_payout_loan.i  -- remaining cash required
+equity_debt_available = equity_limit - equity_debt_balance
+equity_debt_payout_needed_q =  ( cash_required.i > 0 ) && ( equity_debt_available.i > 0 )
+equity_debt_payout = equity_debt_payout_needed_q.i * ( ( cash_required.i <= equity_debt_available ) * cash_required.i + ( cash_required.i > equity_debt_available.i ) * equity_debt_available.i )
+equity_debt_balance = equity_debt_balance + equity_debt_payout.i
+cash_required = cash_required.i - equity_debt_payout.i
+
+other_debt_payout_needed_q =  ( cash_required.i > 0 ) 
+other_debt_payout = cash_required.i * other_debt_payout_needed_q.i
+other_debt_balance = other_debt_balance + other_debt_payout.i
+cash_required = 0 
+
 expense_deductable_period = expense_operations.i -- inflows are positive, outflows negative
 net_taxable = income_taxable_period.i - expense_deductable_period.i
 
@@ -453,13 +497,14 @@ EBT_period = net_taxable.i - depreciation_period.i -- includes depreciation calc
 tax_period = ( EBT_period.i > 0 ) * EBT_period.i * tax_combined_rate
 incentives_period = ( period.i == 1 ) * equity_investment_initial  + ( period.i == 3 ) * incentive_us_itc
 
-loan_payment_period = ( loan_balance > loan_payment ) * loan_payment + ( loan_balance > 0 && loan_balance < loan_payment ) * loan_balance
-loan_interest_period = loan_balance * loan_interest_rate_period
+-- loan payments do not happen when there is no cash to pay the loan
+loan_payment_period = debt_payout_needed_q.i * ( loan_balance.i > loan_payment ) * loan_payment + ( loan_balance.i > 0 && loan_balance.i < loan_payment ) * loan_balance.i
+loan_interest_period = loan_balance.i * loan_interest_rate_period
 
 
-equity_interest_period = equity_debt_balance * equity_interest_rate_period
-cost_of_finance_period = loan_interest_period.i * ( 1 - tax_combined_rate )
-cost_of_equity_debt_period = equity_interest_period.i * (1 - tax_combined_rate )
+equity_interest_period = equity_debt_balance.i * equity_interest_rate_period
+cost_of_finance_period = loan_interest_period * ( 1 - tax_combined_rate )
+cost_of_equity_debt_period = equity_interest_period * ( 1 - tax_combined_rate )
 cost_of_debt_period = cost_of_finance_period.i + cost_of_equity_debt_period.i
 
 
@@ -472,14 +517,14 @@ loan_payment_principal_period = loan_payment_period.i - loan_interest_period.i
 loan_payment_principal_period = f::max loan_payment_principal_period.i 0 ;
 
 free_cashflow_available = net_cashflow_after_tax.i - loan_payment_principal_period.i -- after debt payment
-free_cashflow_gt_equity_debt = ( free_cashflow_available.i > equity_debt_balance ) 
-equity_payment_period = ( free_cashflow_gt_equity_debt.i == 0 ) * free_cashflow_available.i + ( free_cashflow_gt_equity_debt.i ) * equity_debt_balance
+free_cashflow_gt_equity_debt = ( free_cashflow_available.i > equity_debt_balance.i ) 
+equity_payment_period = ( free_cashflow_gt_equity_debt.i == 0 ) * free_cashflow_available.i + ( free_cashflow_gt_equity_debt.i ) * equity_debt_balance.i
 
-loan_balance = loan_balance - loan_payment_period.i + loan_interest_period.i 
-equity_debt_balance = equity_debt_balance - equity_payment_period.i + equity_interest_period.i
+loan_balance = loan_balance.i - loan_payment_period.i + loan_interest_period.i 
+equity_debt_balance = equity_debt_balance.i - equity_payment_period.i + equity_interest_period.i
 
 \#
-i period prev_year year next_year sys_output_period power_revenue_period income_taxable_period expense_operations expense_deductable_period net_taxable depreciation_period EBT_period tax_period incentives_period loan_payment_period equity_interest_period cost_of_finance_period cost_of_equity_debt_period cost_of_debt_period flows_non_taxable_period net_cashflow_pre_tax net_cashflow_after_tax loan_payment_principal_period free_cashflow_available free_cashflow_gt_equity_debt equity_payment_period loan_balance equity_debt_balance
+i period prev_year year next_year sys_output_period power_revenue_period capital_expense direct_labor_expense direct_labor_expense_var land_use_oper_cost commissions_pmnt expense_operations free_cashflow_period expense_deductable_period income_taxable_period net_taxable depreciation_period EBT_period tax_period incentives_period loan_payment_period equity_interest_period cost_of_finance_period cost_of_equity_debt_period cost_of_debt_period flows_non_taxable_period net_cashflow_pre_tax net_cashflow_after_tax debt_payout_loan loan_payment_principal_period loan_balance equity_debt_payout equity_payment_period equity_debt_balance other_debt_balance
 \# 
 sum_periods = f::sum \$i_list ;
 sum_years = f::sum \$year_list ;
