@@ -18,10 +18,12 @@ ad_proc -public qaf_tcl_list_of_lists_to_html_table {
     the first item of each list is the first row, the second item of each list is the second row etc etc.
     the table has the same number of rows as the maximum count of list items, and
     the same number of columns as there are lists.  Lists with too few list items are filled with empty cells.
-    Converts first row to titles if first_are_title is true (1).
+    Converts first row to titles if first_are_titles is true (1).
+    converts first 2 rows to titles if first_are_titles is set to 2, etc etc.
     If watch_print_row is 1, and the first item in one of the lists is "print_row", the column will not be printed and subsequent rows where the value of column print_row is 0 will be ignored.
     Formatting_list items are tcl format specifications applied to the values in the cooresponding tcl_list_of_list columns, one spec per column.
-    If separate_uniques is true, columns that have only 1 row are presented as a separate table, oriented as a column of values
+    If separate_uniques is 1 (default), columns that have only 1 row are presented as a separate table, oriented as a column of values
+    If separate_uniques is 2, columns that have only 1 row *and* columns where all rows (but the title row) are constant, are presented as a separate table, oriented as a column of values.
 } {
     set columns_count [llength $tcl_list_of_lists]
     set formatting_p [expr { [llength $formatting_list] == $columns_count } ]
@@ -31,7 +33,17 @@ ad_proc -public qaf_tcl_list_of_lists_to_html_table {
     set column_number 0
     foreach column_list $tcl_list_of_lists {
         set row_count($column_number) [llength $column_list]
-        set true_column($column_number) [expr { ( ( $separate_uniques && $row_count($column_number) > 2 ) || $separate_uniques != 1 ) } ]
+        set row $first_are_titles
+        set is_constant 1
+        set row_prev [lindex $column_list $first_are_titles]
+        while { $row < $rows_count && $is_constant } {
+            set row_now [lindex $column_list $row]
+            set is_constant [expr { $is_constant && ( $row_prev == $row_now ) } ]
+            set row_prev $row_now
+            incr row
+        }
+        set title_row_count [expr { $first_are_titles + 1 } ]
+        set true_column($column_number) [expr { ( $separate_uniques == 1 && $row_count($column_number) > $title_row_count ) || ( $separate_uniques == 0 ) || ( $separate_uniques == 2 && ( ( $row_count($column_number) > $title_row_count ) && !$is_constant ) ) } ]
         set rows_count [expr { [f::max $rows_count $row_count($column_number) ] } ]
         if { $watch_print_row } {
             if { [lindex $column_list 0] eq "print_row" } {
@@ -524,7 +536,7 @@ loan_balance = loan_balance.i - loan_payment_period.i + loan_interest_period.i
 equity_debt_balance = equity_debt_balance.i - equity_payment_period.i + equity_interest_period.i
 
 \#
-i period prev_year year next_year sys_output_period power_revenue_period capital_expense direct_labor_expense direct_labor_expense_var land_use_oper_cost commissions_pmnt expense_operations free_cashflow_period expense_deductable_period income_taxable_period net_taxable depreciation_period EBT_period tax_period incentives_period loan_payment_period equity_interest_period cost_of_finance_period cost_of_equity_debt_period cost_of_debt_period flows_non_taxable_period net_cashflow_pre_tax net_cashflow_after_tax debt_payout_loan loan_payment_principal_period loan_balance equity_debt_payout equity_payment_period equity_debt_balance other_debt_balance
+
 \# 
 sum_periods = f::sum \$i_list ;
 sum_years = f::sum \$year_list ;
@@ -534,6 +546,7 @@ sum_years = f::sum \$year_list ;
 }
     return $template
 }
+# example report columns: i period prev_year year next_year sys_output_period power_revenue_period capital_expense direct_labor_expense direct_labor_expense_var land_use_oper_cost commissions_pmnt expense_operations free_cashflow_period expense_deductable_period income_taxable_period net_taxable depreciation_period EBT_period tax_period incentives_period loan_payment_period equity_interest_period cost_of_finance_period cost_of_equity_debt_period cost_of_debt_period flows_non_taxable_period net_cashflow_pre_tax net_cashflow_after_tax debt_payout_loan loan_payment_principal_period loan_balance equity_debt_payout equity_payment_period equity_debt_balance other_debt_balance
 
 ad_proc -private acc_fin::model_compute { 
     model 
@@ -630,6 +643,7 @@ ad_proc -private acc_fin::model_compute {
         set _section_count 0
         set _model_sections_list [split $_model \#]
         set _new_model_sections_list [list]
+        set _user_def_var_names_list [list]
         foreach _model_section $_model_sections_list {
             incr _section_count
             
@@ -647,13 +661,20 @@ ad_proc -private acc_fin::model_compute {
                         set _calc_line ""
                     } else {
                         set _calc_line "set ${_calc_line} \} \]"
-                        set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
+                        set _varname [string trim [string range ${_calc_line} 4 [expr { [string first "expr" $_calc_line] - 2 } ]]]
                         regsub {[ ][ ]+} $_calc_line { } _calc_line
                         lappend _new_section_list $_calc_line
-                        if { ![info exists ${_varname}_list] } {
-                            # create list and array history for each variable for logging values of each iteration (for post run analysis etc.)
-                            set ${_varname}_list [list]
-                            array set ${_varname}_arr [list]
+                        # create variable attribute and handling variables _arr() and _list and add to _user_def_var_names_list
+                        if { [regexp -all -- {[^a-zA-z0-9\_]} $_varname _varname_badchars] } {
+                            set _err_text "ERROR $_varname contains characters '${_varname_badchars}' which are not allowed."
+                            incr _err_state 
+                        } else {
+                            if { ![info exists ${_varname}_list] && [string length $_varname] > 0 } {
+                                # create list and array history for each variable for logging values of each iteration (for post run analysis etc.)
+                                set ${_varname}_list [list]
+                                array set ${_varname}_arr [list]
+                                lappend _user_def_var_names_list $_varname
+                            }
                         }
                     }
                 }
@@ -667,7 +688,7 @@ ad_proc -private acc_fin::model_compute {
                         set _calc_line [string range $_calc_line 0 $comment_start]
                     }
                     # substitute var_arr(0) for variables on left side
-                    set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
+                    set _varname [string trim [string range ${_calc_line} 4 [expr { [string first "expr" $_calc_line] - 2 } ]]]
                     regsub -- $_varname $_calc_line "${_varname}_arr(0)" _calc_line
                     # and on right side
                     regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr(0) } _calc_line
@@ -701,7 +722,7 @@ ad_proc -private acc_fin::model_compute {
 
                     # substitute var_arr($_i) for variables on left side
                     set _original_calc_line $_calc_line
-                    set _varname [string trim [string range ${_calc_line} 4 [string first expr $_calc_line]-2]]
+                    set _varname [string trim [string range ${_calc_line} 4 [expr { [string first "expr" $_calc_line] - 2 } ]]]
                     if { [catch {
                         regsub -- $_varname $_calc_line "${_varname}_arr(\$_i)" _calc_line 
                         # substitute var_arr($_h) for variables on right side
@@ -735,19 +756,26 @@ ad_proc -private acc_fin::model_compute {
                 # report values 
                 # convert to list of variables that get converted into a list of lists.
                 # to be processed externally (sorted etc)
-                foreach _named_var $_section_list {
-                    set _named_var_trimmed [string trim $_named_var]
-                    if { [string length $_named_var_trimmed] > 0 } {
-                        lappend _variables_list $_named_var_trimmed
+                # if blank, adds all variables to be reported
+                if { [string length [string trim $_section_list]] > 10 } {
+                    foreach _named_var $_section_list {
+                        set _named_var_trimmed [string trim $_named_var]
+                        if { [string length $_named_var_trimmed] > 0 } {
+                            lappend _variables_list $_named_var_trimmed
+                        }
                     }
-                    set _new_section_list $_variables_list
-                    set _section_list $_new_section_list
+                } else {
+                    set _variables_list $_user_def_var_names_list
                 }
+                set _new_section_list $_variables_list
+                set _section_list $_new_section_list
             }
             
             if { $_section_count eq 4 } {
                 set _section_list [split $_model_section \n\r]
                 set _new_section_list [list]
+
+
                 foreach _calc_line $_section_list {
                     if { ![regsub -- {=} $_calc_line "\[expr \{ " _calc_line] } {
                         append _err_text "'${_calc_line}' ignored. No equal sign found.\n"
@@ -805,28 +833,45 @@ ad_proc -private acc_fin::model_compute {
         }
     }
         
+    set _model2 [lindex $_model_sections_list 2]
     # initial conditions
-    set timestamp [clock seconds]
+    set timestamp [clock clicks -milliseconds]
     set timestamp_arr(0) $timestamp
+    set dt_arr(0) 0.
     set h_arr(0) -1.
     set i_arr(0) 0.
  
     # iteration conditions
+    # h is i - 1
     set h 0.
     set _h 0
+
     for {set _i 1} {$_i <= $_number_of_iterations} {incr _i} {
         # other values are set in the model automatically
         set h_arr($_i) $h
         set i [expr { double($_i) } ]
         set i_arr($_i) $i
 
-
         foreach _line $_model1 {
             eval $_line
         }
+
+        # After calculations, carry all remaining user defined constants forward.
+        # Current iteration values could be preset to last iteration values by default,
+        # but then calculations that require current iteration values but reference previous iteration 
+        # values (ie reference varname instead of varname.i) will be more difficult to identify, because
+        # references to last iteration values would not error -- ie current values would have last iteration's values.
+        foreach _variable_name $_user_def_var_names_list {
+            if { ![info exists ${_variable_name}_arr($_i)] } {
+                set ${_variable_name}_arr($_i) [set ${_variable_name}_arr($_h)]
+            } 
+        }
+
         # timestamp for $_i is after $_i iteration is done.
-        set timestamp_arr($_i) [clock seconds]
+        set timestamp_arr($_i) [clock clicks -milliseconds]
         set dt_arr($_i) [expr { $timestamp_arr($_i) - $timestamp_arr($_h) } ]
+
+
         set _h $_i
         set h $i
     }
@@ -835,14 +880,37 @@ ad_proc -private acc_fin::model_compute {
     # make ordered lists of each of the different arrays (by index), for each of the variables that are being reported
     # So, {var}_arr(0..n) becomes {var}_list
     set _model2 [lindex $_model_sections_list 2]
-    for {set _i 0} {$_i <= $_number_of_iterations} {incr _i} {
-        foreach _variable_name $_model2 {
-            lappend ${_variable_name}_list [set ${_variable_name}_arr($_i)]
+    foreach reserved_variable [list timestamp dt i] {
+        if { [lsearch $_model2 $reserved_variable] < 0 } {
+            # we are appending this way, so that reserved variables default to first in the list
+            set _model2 [concat $reserved_variable $_model2]
         }
     }
+
+
+    for {set _i 0} {$_i <= $_number_of_iterations} {incr _i} {
+        foreach _variable_name $_model2 {
+            if { [info exists ${_variable_name}_arr($_i)] } {
+                lappend ${_variable_name}_list [set ${_variable_name}_arr($_i)] 
+            } else {
+                append _err_text "ERROR '${_variable_name}' does not exist for iteration $_i."
+                ns_log Warning "acc_fin::model_compute ref 869: '${_variable_name}_arr($_i)' does not exist."
+                incr _err_state
+            }
+        }
+    }
+
+ # for debugging, for now output list..
     set _output [list]
     foreach _variable_name $_model2 {
-        lappend _output [linsert [set ${_variable_name}_list] 0 $_variable_name]
+        if { [info exists ${_variable_name}_list] } {
+            lappend _output [linsert [set ${_variable_name}_list] 0 $_variable_name]
+        } else {
+            append _err_text "ERROR '${_variable_name}_list' does not exist"
+            ns_log Warning "acc_fin::model_compute ref 882: '${_variable_name}_list' does not exist."
+            incr _err_state
+        }
+
     }
 
 
@@ -851,12 +919,17 @@ ad_proc -private acc_fin::model_compute {
     
     foreach _line $_model3 {
         set _varname [string trim [string range ${_line} 4 [string first " " ${_line} 4]]]
-        set _calc_value [eval $_line]
-        lappend _output [list $_varname $_calc_value]
+        if {  [catch { set _calc_value [eval $_line] } _this_err_text] } {
+            append _err_text "ERROR calculate '${_line}' errored with: ${_err_this_text}."
+            ns_log Warning "acc_fin::model_compute ref 896: calculate '${_line}' errored with: ${_err_this_text}."
+            incr _err_state
+        } else {
+            lappend _output [list $_varname $_calc_value]
+        }
     }
 
         ns_log Notice "acc_fin::model_compute end"
-        set _output [linsert $_output 0 [list "ERRORS" 0]]
+        set _output [linsert $_output 0 [list $_err_text $_err_state]]
     return $_output
 
 }
