@@ -27,23 +27,31 @@ ad_proc -public qaf_tcl_list_of_lists_to_html_table {
 } {
     set columns_count [llength $tcl_list_of_lists]
     set formatting_p [expr { [llength $formatting_list] == $columns_count } ]
-
     set column_to_hide -1
-    set rows_count 0
     set column_number 0
+    set rows_count 0
+
     foreach column_list $tcl_list_of_lists {
+        # determine table's row size by examining row size for each column
         set row_count($column_number) [llength $column_list]
         set row $first_are_titles
-        set is_constant 1
         set row_prev [lindex $column_list $first_are_titles]
-        while { $row < $rows_count && $is_constant } {
+
+        set is_constant 1
+
+        while { $row < $row_count($column_number) && $is_constant } {
             set row_now [lindex $column_list $row]
+            # examine the data of each column's row, if constant, maybe display as a constant.
             set is_constant [expr { $is_constant && ( $row_prev == $row_now ) } ]
             set row_prev $row_now
             incr row
         }
+        # title_row_count = the number of rows dedicated to the title
         set title_row_count [expr { $first_are_titles + 1 } ]
+
         set true_column($column_number) [expr { ( $separate_uniques == 1 && $row_count($column_number) > $title_row_count ) || ( $separate_uniques == 0 ) || ( $separate_uniques == 2 && ( ( $row_count($column_number) > $title_row_count ) && !$is_constant ) ) } ]
+#        ns_log Notice "qaf_tcl_list_of_lists_to_html_table, ref 49: true_column(${column_number}) =  $true_column(${column_number}), row_count(${column_number}) = $row_count(${column_number}), is_constant = ${is_constant}"
+
         set rows_count [expr { [f::max $rows_count $row_count($column_number) ] } ]
         if { $watch_print_row } {
             if { [lindex $column_list 0] eq "print_row" } {
@@ -55,8 +63,8 @@ ad_proc -public qaf_tcl_list_of_lists_to_html_table {
         }
         incr column_number
     }
-
-    set table_html "<table border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n"
+    # rows_count now contains max rows
+    set table_html "<table class=\"list-table\" border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n"
     if { $first_are_titles } {
         set cell_tag "th"
     } else {
@@ -64,11 +72,14 @@ ad_proc -public qaf_tcl_list_of_lists_to_html_table {
     }
 
     for {set row_index 0} { $row_index < $rows_count } { incr row_index 1 } {
-
         # check to see if we should be ignoring this row
-        if { $column_to_hide == -1 || ($column_to_hide > -1 && [expr { round( [lindex [lindex $tcl_list_of_lists $column_to_hide ] $row_index] ) } ] != 0 ) } {
+        if { $column_to_hide == -1 || ( $column_to_hide > -1 && [expr { round( [lindex [lindex $tcl_list_of_lists $column_to_hide ] $row_index] ) } ] != 0 ) } {
             # process row
-            set row_html "<tr>"
+            if { [expr {( $row_index / 2. ) == ( round( $row_index / 2. ) ) } ] } {
+                set row_html "<tr class=\"even\">"
+            } else {
+                set row_html "<tr class=\"odd\">"
+            }
             set format_row_p [expr { ( $first_are_titles != 0 && $row_index > 0 ) || ( $first_are_titles == 0 ) } ]
             for {set column_index 0} { $column_index < $columns_count } { incr column_index 1 } {
                 if { $column_index != $column_to_hide && $true_column($column_index) } {
@@ -96,11 +107,14 @@ ad_proc -public qaf_tcl_list_of_lists_to_html_table {
     # now we handle the data with unique (only one value) in a column
 
 
+
+
+### stopped here. buggy logic. first row always indicates a constant!
     set table_2_html "<table border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n"
     set row_html ""
     set format_row_p [expr { ( $first_are_titles != 0 && $row_index > 0 ) || ( $first_are_titles == 0 ) } ]
-    for {set column_index 0} { $column_index < $columns_count } { incr column_index 1 } {
-        if { $column_index != $column_to_hide && $true_column($column_index) == 0 } {
+    for {set column_index 0 } { $column_index < $columns_count } { incr column_index 1 } {
+        if { ( $column_index != $column_to_hide ) && ( $true_column($column_index) == 0 ) } {
             # process this column / cell
             set cell_heading [lindex [lindex $tcl_list_of_lists $column_index ] 0]
             set cell_value [lindex [lindex $tcl_list_of_lists $column_index ] 1]
@@ -374,15 +388,15 @@ other_costs = 10381571.06 -- $ (soft costs: shipping, construction/developer fee
 system_cost_installed = capital_costs_installed + other_costs
 
 capital_expense_payout_sched = acc_fin::list_set \".1 .1 .05 .06 .05 .05 .05 .2 .34\" ; --multiply this by system_cost_installed for dollar amounts
-capital_expenses_begin = production_begins - 8 -- that is 23 - 8, given the 23 periods for construction prior to operation
+capital_expenses_begin = - 8 -- that is 8 periods before production_begins, given the 23 periods for construction prior to operation
 direct_labor_expense_fixed_sched = acc_fin::list_set \"15166.67 15166.67 15166.667\" ;
-direct_labor_expenses_begin = production_begins - 2
+direct_labor_expenses_begin =  - 2  -- relative to production_begins
 direct_labor_expense_var_sched = acc_fin::list_set \"0 0\" ; -- variable
-direct_labor_expenses_var_begin = production_begins - 2
+direct_labor_expenses_var_begin = - 2 -- relative to production_begins
 land_use_oper_cost_sched = acc_fin::list_set \"11385. 11385. 11385.\" ; -- operating costs
-land_use_oper_cost_begin = production_begins - 2
+land_use_oper_cost_begin = - 2 -- relative to production_begins
 commissions_pmnt_sched = acc_fin::list_set \"0 0\" ;
-commissions_pmnt_begin = production_begins
+commissions_pmnt_begin = 0 -- same as production_begins
 
 loan_principal_initial = 0 -- $
 loan_interest_rate_annual = .07 -- % as decimal, compounded each period
@@ -398,7 +412,7 @@ equity_investment_initial = 30640000
 equity_discount_rate_annual = .08 -- % as decimal, compounded each period
 equity_discount_rate_period = equity_discount_rate_annual / periods_per_year
 equity_as_loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
-period_equity_invest_begins = production_begins -- when the funds become available
+period_equity_invest_begins = 0 -- relative to production_begins, when the funds become available
 equity_limit =  69900000 -- $
 
 operations_rate_annual = 27.918 -- $/kW/yr
@@ -834,16 +848,15 @@ ad_proc -private acc_fin::model_compute {
     }
         
     set _model2 [lindex $_model_sections_list 2]
-    # initial conditions
+    # initial conditions, h = -1, i = 0
     set timestamp [clock clicks -milliseconds]
     set timestamp_arr(0) $timestamp
-    set dt_arr(0) 0.
-    set h_arr(0) -1.
-    set i_arr(0) 0.
+    set dt_arr(0) 0
+    set h_arr(0) -1.0
+    set i_arr(0) 0.0
  
-    # iteration conditions
-    # h is i - 1
-    set h 0.
+    # begin new iteration
+    set h 0.0
     set _h 0
 
     for {set _i 1} {$_i <= $_number_of_iterations} {incr _i} {
@@ -880,10 +893,11 @@ ad_proc -private acc_fin::model_compute {
     # make ordered lists of each of the different arrays (by index), for each of the variables that are being reported
     # So, {var}_arr(0..n) becomes {var}_list
     set _model2 [lindex $_model_sections_list 2]
-    foreach reserved_variable [list timestamp dt i] {
-        if { [lsearch $_model2 $reserved_variable] < 0 } {
+    foreach reserved_variable [list dt timestamp h i] {
+        if { [lsearch -exact $_model2 $reserved_variable] < 0 } {
             # we are appending this way, so that reserved variables default to first in the list
             set _model2 [concat $reserved_variable $_model2]
+
         }
     }
 
