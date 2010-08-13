@@ -7,304 +7,6 @@ ad_library {
 
 namespace eval acc_fin {}
 
-ad_proc -public qaf_tcl_list_of_lists_to_html_table {
-    tcl_list_of_lists
-    {formatting_list ""}
-    {first_are_titles "0"}
-    {watch_print_row "1"}
-    {separate_uniques "1"}
-} {
-    returns an html table where each cell is an item from a tcl list of lists, where 
-    the first item of each list is the first row, the second item of each list is the second row etc etc.
-    the table has the same number of rows as the maximum count of list items, and
-    the same number of columns as there are lists.  Lists with too few list items are filled with empty cells.
-    Converts first row to titles if first_are_titles is true (1).
-    converts first 2 rows to titles if first_are_titles is set to 2, etc etc.
-    If watch_print_row is 1, and the first item in one of the lists is "print_row", the column will not be printed and subsequent rows where the value of column print_row is 0 will be ignored.
-    Formatting_list items are tcl format specifications applied to the values in the cooresponding tcl_list_of_list columns, one spec per column.
-    If separate_uniques is 1 (default), columns that have only 1 row are presented as a separate table, oriented as a column of values
-    If separate_uniques is 2, columns that have only 1 row *and* columns where all rows (but the title row) are constant, are presented as a separate table, oriented as a column of values.
-} {
-    set columns_count [llength $tcl_list_of_lists]
-    set formatting_p [expr { [llength $formatting_list] == $columns_count } ]
-    set column_to_hide -1
-    set column_number 0
-    set rows_count 0
-
-    foreach column_list $tcl_list_of_lists {
-        # determine table's row size by examining row size for each column
-        set row_count($column_number) [llength $column_list]
-        set row $first_are_titles
-        set row_prev [lindex $column_list $first_are_titles]
-
-        set is_constant 1
-
-        while { $row < $row_count($column_number) && $is_constant } {
-            set row_now [lindex $column_list $row]
-            # examine the data of each column's row, if constant, maybe display as a constant.
-            set is_constant [expr { $is_constant && ( $row_prev == $row_now ) } ]
-            set row_prev $row_now
-            incr row
-        }
-        # title_row_count = the number of rows dedicated to the title
-        set title_row_count [expr { $first_are_titles + 1 } ]
-
-        set true_column($column_number) [expr { ( $separate_uniques == 1 && $row_count($column_number) > $title_row_count ) || ( $separate_uniques == 0 ) || ( $separate_uniques == 2 && ( ( $row_count($column_number) > $title_row_count ) && !$is_constant ) ) } ]
-#        ns_log Notice "qaf_tcl_list_of_lists_to_html_table, ref 49: true_column(${column_number}) =  $true_column(${column_number}), row_count(${column_number}) = $row_count(${column_number}), is_constant = ${is_constant}"
-
-        set rows_count [expr { [f::max $rows_count $row_count($column_number) ] } ]
-        if { $watch_print_row } {
-            if { [lindex $column_list 0] eq "print_row" } {
-                set column_to_hide $column_number
-            }
-        }
-        if { $formatting_p } {
-            set format_spec($column_number) [lindex $formatting_list $column_number]
-        }
-        incr column_number
-    }
-    # rows_count now contains max rows
-    set table_html "<table class=\"list-table\" border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n"
-    if { $first_are_titles } {
-        set cell_tag "th"
-    } else {
-        set cell_tag "td"
-    }
-
-    for {set row_index 0} { $row_index < $rows_count } { incr row_index 1 } {
-        # check to see if we should be ignoring this row
-        if { $column_to_hide == -1 || ( $column_to_hide > -1 && [expr { round( [lindex [lindex $tcl_list_of_lists $column_to_hide ] $row_index] ) } ] != 0 ) } {
-            # process row
-            if { [expr {( $row_index / 2. ) == ( round( $row_index / 2. ) ) } ] } {
-                set row_html "<tr class=\"even\">"
-            } else {
-                set row_html "<tr class=\"odd\">"
-            }
-            set format_row_p [expr { ( $first_are_titles != 0 && $row_index > 0 ) || ( $first_are_titles == 0 ) } ]
-            for {set column_index 0} { $column_index < $columns_count } { incr column_index 1 } {
-                if { $column_index != $column_to_hide && $true_column($column_index) } {
-                    # process this column / cell
-                    set cell_value [lindex [lindex $tcl_list_of_lists $column_index ] $row_index]
-                    if { $formatting_p && $format_row_p } {
-                        if { [catch { set cell_value [format $format_spec($column_index) $cell_value] } result_msg] } {
-                            set cell_value "format error(spec,value): $format_spec(${column_index}) ${cell_value}"
-                        } 
-                    } 
-                    set cell_html "<${cell_tag}>${cell_value}</${cell_tag}>"
-                    append row_html $cell_html
-                }
-            }
-            append row_html "</tr>\n"
-            append table_html $row_html
-        } else {
-            append table_html "<tr><td colspan=\"$columns_count\">(blank row ${row_index})</td></tr>"
-        }
-        # next row
-        set cell_tag "td"
-    }
-
-    append table_html "</table>\n"
-    # now we handle the data with unique (only one value) in a column
-
-
-
-
-### stopped here. buggy logic. first row always indicates a constant!
-    set table_2_html "<table border=\"1\" cellspacing=\"0\" cellpadding=\"3\">\n"
-    set row_html ""
-    set format_row_p [expr { ( $first_are_titles != 0 && $row_index > 0 ) || ( $first_are_titles == 0 ) } ]
-    for {set column_index 0 } { $column_index < $columns_count } { incr column_index 1 } {
-        if { ( $column_index != $column_to_hide ) && ( $true_column($column_index) == 0 ) } {
-            # process this column / cell
-            set cell_heading [lindex [lindex $tcl_list_of_lists $column_index ] 0]
-            set cell_value [lindex [lindex $tcl_list_of_lists $column_index ] 1]
-            if { $formatting_p && $format_row_p } {
-                if { [catch { set cell_value [format $format_spec($column_index) $cell_value] } result_msg] } {
-                    set cell_value "format error(spec,value): $format_spec(${column_index}) ${cell_value}"
-                } 
-            } 
-            set cell_html "<tr><td>${cell_heading}</td><td>${cell_value}</td></tr>"
-            append row_html $cell_html
-        }
-    }
-    append table_2_html $row_html
-    append table_2_html "</table>"
-
-    append table_2_html $table_html
-
-    return $table_2_html
-} 
-
-ad_proc -public qaf_fp {
-    number
-} {
-    returns a floating point version a number, if the number is an integer (no decimal point).
-    tcl math can truncate a floating point in certain cases, such as when the divisor is an integer.
-    Use double() instead when referencing a value in an expr.
-} {
-    if { [string first "." $number] < 0 } {
-      #  append number ".0"
-        catch { 
-            set number [expr { double( $number ) } ] 
-        } else {
-            # do nothing. $number is not a recognized number
-        }
-    }
-    return $number
-} 
-
-
-ad_proc -public qaf_sign {
-    number
-} {
-    Returns the sign of the number represented as -1, 0, or 1
-} {
-    if { $number == 0 } {
-        set sign 0
-    } else {
-        set sign [expr { round( $number / double( abs ( $number ) ) ) } ]
-    }
-    return $sign
-}
-
-ad_proc -public acc_fin::list_set {
-    list_of_values
-    {delimiter " "}
-} {
-    Returns a list_of_values in tcl list format. This allows the model to use tcl list without complicating permissions.
-} {
-    if { [string length $delimiter] == 0} {
-        set delimiter " "
-    }
-    set max_index [llength $list_of_values]
-    if { $max_index > 1 } {
-        set values_list $list_of_values
-     } else {
-         set values_list [split $list_of_values $delimiter]
-     }
-    return $list_of_values
-} 
-
-
-ad_proc -public acc_fin::list_index {
-    list_of_values
-    index_ref
-    {default_value "0"}
-} {
-    Returns the value of the list at index_ref where the first value is 0. If the reference is not valid or out of range, returns the default value ( 0 by default), or the last value of the list if default is blank.
-} {
-    set index_ref [expr { round( $index_ref ) } ]
-    set max_index [llength $list_of_values]
-    if { $max_index > 1 } {
-        set values_list $list_of_values
-     } else {
-         set values_list [split $list_of_values]
-     }
-     set values_list_count [llength $values_list]
-    if { $index_ref > -1 && $index_ref < $values_list_count } {
-        set return_value [lindex $values_list $index_ref]
-    } elseif { [string length $default_value] > 0 } {
-        set return_value $default_value
-    } else {
-        set return_value [lindex $values_list end]
-    }
-} 
-
-ad_proc -public acc_fin::list_indexes {
-    list_of_values
-    list_of_indexes
-    {default_value "0"}
-} {
-    Returns a list of  values of the list_of_values for each index in list_of_indexes.  The first value is at index  0. If an index reference is not valid or out of range, returns the default value ( 0 by default), or the last value of the list_of_values if default is blank.
-} {
-
-    if { [llength $list_of_values] > 1 } {
-        set values_list $list_of_values
-    } else {
-        set values_list [split $list_of_values]
-    }
-    set values_list_count [llength $values_list]
-    
-    if { [llength $list_of_indexes] > 1 } {
-        set indexes_list $list_of_indexes
-    } else {
-        set indexes_list [split $list_of_indexes]
-    }
-    set indexes_list_count [llength $indexes_list]
-    
-    set new_list_of_values [list]
-    foreach index $list_of_indexes {
-        lappend new_list_of_values [acc_fin::list_index $list_of_values $index $default_value]
-    }
-    return $new_list_of_values
-} 
-
-ad_proc -public acc_fin::list_sorted_indexes {
-    list_of_values 
-    {sort_type "-real"}
-} {
-    Returns a list of indexes of the list_of_values that puts the list_of_values in sorted order. This is useful for reports, where the same sort needs to be applied on multiple lists. This output, when supplied to list_indexes, returns a list of sorted values. see tcl lsort for sort_type options.
-} {
-    if { [llength $list_of_values] > 1 } {
-        set values_list $list_of_values
-    } else {
-        set values_list [split $list_of_values]
-    }
-    set values_list_count [llength $values_list]
-    set values_sorted_list [lsort $sort_type $values_list]
-    set index_sorted_list [list]
-    foreach value $values_sorted_list {
-        set propose_index [lsearch -exact $values_list $value]
-        while { [lsearch -exact $propose_index $index_sorted_list] > -1 } {
-            incr propose_index
-            set propose_index [lsearch -exact -start $propose_index  $values_list $value]
-        }
-        lappend index_sorted_list $propose_index
-    }
-    return $index_sorted_list
-}
-
-ad_proc -public acc_fin::list_summary_indexes {
-    list_of_values
-} {
-    Returns a list of indexes of the list_of_values, where only the last value in a sequence of same numbers is used. This is useful for identifying  end_of_period iterations in a list where multiple iterations occur within the same period. For example, in a list of years, year "10" may be for iterations 120 through 131 when iterated monthly. For this example, the value 131 is returned for this year as the last in the index for that year. A second value for "10" is added, if "10" appears in a sequence later in the list. 
-} {
-    if { [llength $list_of_values] > 1 } {
-        set values_list $list_of_values
-    } else {
-        set values_list [split $list_of_values]
-    }
-    set values_list_count [llength $values_list]
-    set indexes_unique_list [list]
-    if { $values_list_count > 1 } {
-        set last_value [lindex $values_list 0]
-        for {set index 1} {$index < $values_list_count } { incr index 1} {
-            set last_index [expr $index - 1]
-            set value [lindex $values_list $index]
-            if { $value ne $last_value && $last_index > -1  } {
-                lappend indexes_unique_list $last_index
-            }
-            set last_value $value
-        }
-        lappend indexes_unique_list $index
-        
-    } elseif { $values_list_count == 1 } {
-       lappend indexes_unique_list 0
-    }
-    return $indexes_unique_list
-}
-
-
-ad_proc -public acc_fin::inflation_factor {
-    annual_inflation_rate
-    intervals_per_year
-    year
-} {
-    Returns the factor to apply to a value to adjust for inflation.
-    Assumes inflationary factors occur once per year at end of year.
-} {
-    set inflationary_factor [expr { pow ( 1. + $annual_inflation_rate / double($intervals_per_year) , $year - 1. ) } ]
-}
 
 ad_proc -private acc_fin::template_model { 
     template_number
@@ -371,16 +73,18 @@ energy_output_cert_annual = 43288918. -- kWh/kW
 forecast_peak_power = 2298.01 -- hours (was base_sys_perf)
 annual_system_degredation = 0.005  -- % as decimal
 system_power_output_peak = 19395. -- kW (was annu_sys_output)
-sys_output_period = 0 -- kWh
-production_begins = 24 -- period 24 is when production begins ie. period 1
-period =  -1 * production_begins + 1 
-year = floor( ( ( period - production_begins - 1 ) / periods_per_year ) ) 
-next_year = year + 1
-prev_year = year - 1
+sys_output = 0 -- kWh
+production_begins = 24 -- interval 24 is when production begins ie. period 1
+
+period = -23  -- -1 * production_begins + 1 
+year = -1  -- floor( ( ( period + periods_per_year - 1 ) / periods_per_year ) ) 
+next_year = 0 -- round( year + 1 )
+prev_year = -2 -- round( year - 1 )
+
 
 ppa_rate = .2 -- $/kWh
 ppa_escalation = .025 -- % as decimal (factor)
-power_revenue_period = 0 -- $  (was  direct_income)
+power_revenue = 0 -- $  (was  direct_income)
 
 equipment_costs = 107894187.0
 capital_costs_installed = 117445809.11 -- $ (hard costs: equipment + fees)
@@ -388,29 +92,35 @@ other_costs = 10381571.06 -- $ (soft costs: shipping, construction/developer fee
 system_cost_installed = capital_costs_installed + other_costs
 
 capital_expense_payout_sched = acc_fin::list_set \".1 .1 .05 .06 .05 .05 .05 .2 .34\" ; --multiply this by system_cost_installed for dollar amounts
-capital_expenses_begin = - 8 -- that is 8 periods before production_begins, given the 23 periods for construction prior to operation
-direct_labor_expense_fixed_sched = acc_fin::list_set \"15166.67 15166.67 15166.667\" ;
-direct_labor_expenses_begin =  - 2  -- relative to production_begins
-direct_labor_expense_var_sched = acc_fin::list_set \"0 0\" ; -- variable
-direct_labor_expenses_var_begin = - 2 -- relative to production_begins
+capital_expenses_begin = -8 -- that is 8 intervals before production_begins, given the 23 periods for construction prior to operation
+direct_labor_cost_fixed_sched = acc_fin::list_set \"15166.67 15166.67 15166.667\" ;
+direct_labor_costs_begin =  -2  -- relative to production_begins
+direct_labor_cost_var_sched = acc_fin::list_set \"0 0\" ; -- variable
+direct_labor_costs_var_begin = -2 -- relative to production_begins
 land_use_oper_cost_sched = acc_fin::list_set \"11385. 11385. 11385.\" ; -- operating costs
-land_use_oper_cost_begin = - 2 -- relative to production_begins
+land_use_oper_cost_begin = -2 -- relative to production_begins
 commissions_pmnt_sched = acc_fin::list_set \"0 0\" ;
 commissions_pmnt_begin = 0 -- same as production_begins
+g_and_a = 0  -- general and administrative costs
+mgt_fees = 0 -- management costs
 
 loan_principal_initial = 0 -- $
 loan_interest_rate_annual = .07 -- % as decimal, compounded each period
-loan_interest_rate_period = loan_interest_rate_annual / periods_per_year
+loan_interest_rate = loan_interest_rate_annual / periods_per_year
 loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
 loan_years = 18
 loan_payment = acc_fin::loan_payment loan_principal_initial loan_interest_rate_annual periods_per_year loan_years ;
-period_loan_begins = 12 -- when loan funds become available
+period_loan_begins = 0 -- when loan funds become available, and production begins, period 0, or interval 24 (currently)
 loan_limit = 60601000 -- $
+debt_fin_avail = 60601000 -- ie loan_limit
+debt_payout = 0 --
+loan_balance = 0
 
 equity_debt_balance = 0 -- should be about: 68404748.86 at period 0
 equity_investment_initial = 30640000
+equity_debt_avail = equity_investment_initial
 equity_discount_rate_annual = .08 -- % as decimal, compounded each period
-equity_discount_rate_period = equity_discount_rate_annual / periods_per_year
+equity_discount_rate = equity_discount_rate_annual / periods_per_year
 equity_as_loan_apr = pow( 1 + loan_interest_rate_annual / periods_per_year , periods_per_year ) - 1 -- shown as a decimal
 period_equity_invest_begins = 0 -- relative to production_begins, when the funds become available
 equity_limit =  69900000 -- $
@@ -424,7 +134,8 @@ tax_combined_rate = .4358 -- % expressed as decimal (state + federal)
 incentive_us_itc = .3 * capital_costs_installed
 
 flows_non_taxable_initial = 0 -- this should include any cost of debt of financing during construction, if pre-operation is not iterated in forecast
-overage = 0 -- refers to overage of available cash via capital/finances
+overage = 0 -- refers to overage of available cash via capital/finance
+net_cashflow_after_tax_accum = 0
 
 \#
 -- constants --
@@ -441,30 +152,35 @@ periods_per_year = periods_per_year
 depreciation_annual = depreciation_annual
 depreciation_basis = depreciation_basis
 loan_payment = loan_payment
-loan_interest_rate_period = loan_interest_rate_period
+loan_interest_rate = loan_interest_rate
 loan_limit = loan_limit
 period_loan_begins = period_loan_begins
 equity_investment_initial = equity_investment_initial
 incentive_us_itc = incentive_us_itc
-equity_interest_rate_period = equity_interest_rate_period
+equity_discount_rate = equity_discount_rate
+equity_debt_avail = equity_debt_avail
 equity_limit = equity_limit
 loan_principal_initial = loan_principal_initial
 period_equity_invest_begins = period_equity_invest_begins
 production_begins = production_begins
 capital_expenses_begin = capital_expenses_begin
-direct_labor_expenses_begin = direct_labor_expenses_begin
-direct_labor_var_expenses_begin = direct_labor_var_expenses_begin
+direct_labor_costs_begin = direct_labor_costs_begin
+direct_labor_var_costs_begin = direct_labor_var_costs_begin
 land_use_oper_cost_begin = land_use_oper_cost_begin
 commissions_pmnt_begin = commissions_pmnt_begin
+mgt_fees = mgt_fees
+g_and_a = g_and_a
 capital_expense_payout_sched = capital_expense_payout_sched
-direct_labor_expense_fixed_sched = direct_labor_expense_fixed_sched
-direct_labor_expense_var_sched = direct_labor_expense_var_sched 
+direct_labor_cost_fixed_sched = direct_labor_cost_fixed_sched
+direct_labor_cost_var_sched = direct_labor_cost_var_sched 
 land_use_oper_cost_sched = land_use_oper_cost_sched
 commissions_pmnt_sched = commissions_pmnt_sched
 
 -- incremental --
+ -- each increment (and it's reference) represents the beginning of an interval of time
+
 period = period + 1 
-year = floor( ( ( period.i +  periods_per_year - 1 ) / periods_per_year ) ) 
+year = floor( ( ( period.i + periods_per_year - 1 ) / periods_per_year ) ) 
 next_year = round( year.i + 1 )
 prev_year = round( year.i - 1 )
 producing = ( period.i > 0 )
@@ -472,82 +188,90 @@ producing = ( period.i > 0 )
 -- iterative calculations --
 Use these two equations if loans are dispersed at one time:
   -- equity_debt_balance equals equity_debt_balance + ( period_equity_invest_begins == i ) * equity_investment_initial 
-  -- loan_balance equals loan_balance + ( period_loan_begins == i ) * loan_principal_initial
+  -- loan_balance = loan_balance + ( period_loan_begins == i ) * loan_principal_initial
 
+ -- revenues
 
-sys_output_period = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; * producing
-power_revenue_period = sys_output_period.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i ) 
+sys_output = acc_fin::energy_output forecast_peak_power system_power_output_peak annual_system_degredation year.i periods_per_year ; * producing -- cashflow!rc8
+power_revenue = sys_output.i * ppa_rate * pow( 1 + ppa_escalation , prev_year.i ) 
+revenues = power_revenue.i  -- plus taxable incentives etc if any, cashflow!rc9 (and precashflow!c2)
 
-income_taxable_period = power_revenue_period.i -- plus taxable incentives etc if any
+ -- expenses
 
 capital_expense_ref = period.i - capital_expenses_begin
-capital_expense = acc_fin::list_index capital_expense_payout_sched capital_expense_ref.i ; * system_cost_installed
-direct_labor_expense_ref = period.i - direct_labor_expenses_begin
-direct_labor_expense = acc_fin::list_index direct_labor_expense_fixed_sched direct_labor_expense_ref.i ;
-direct_labor_expense_var_ref = period.i - direct_labor_var_expenses_begin
-direct_labor_expense_var = acc_fin::list_index direct_labor_expense_var_sched direct_labor_expense_var_ref.i ;
+capital_expense = acc_fin::list_index capital_expense_payout_sched capital_expense_ref.i ; * system_cost_installed -- precashflow!rc15
+
+direct_labor_cost_ref = period.i - direct_labor_costs_begin
+direct_labor_cost = acc_fin::list_index direct_labor_cost_fixed_sched direct_labor_cost_ref.i ; -- precashflow!c4
+direct_labor_cost_var_ref = period.i - direct_labor_var_costs_begin
+direct_labor_cost_var = acc_fin::list_index direct_labor_cost_var_sched direct_labor_cost_var_ref.i ; -- precashflow!c5
 land_use_oper_cost_ref = period.i - land_use_oper_cost_begin
-land_use_oper_cost = acc_fin::list_index land_use_oper_cost_sched land_use_oper_cost_ref.i ;
+land_use_oper_cost = acc_fin::list_index land_use_oper_cost_sched land_use_oper_cost_ref.i ;  -- precashflow!c3
 commissions_pmnt_ref = period.i - commissions_pmnt_begin
-commissions_pmnt = acc_fin::list_index commissions_pmnt_sched commissions_pmnt_ref.i ;
-expense_operations = producing.i * operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year 
+commissions_pmnt = acc_fin::list_index commissions_pmnt_sched commissions_pmnt_ref.i ; --precashflow!c6
+production_cost = producing.i * operations_rate_annual * system_power_output_peak * pow( 1 + inflation_rate / periods_per_year , prev_year.i ) / periods_per_year  -- cashflow!rc12
+ -- interest expenses are not to be included in capital budgeting calculations Portlable MBA in Fin and Acct pg 296
 
-free_cashflow_period = power_revenue_period.i - capital_expense.i - expense_operations.i - direct_labor_expense.i - direct_labor_expense_var.i - land_use_oper_cost.i - commissions_pmnt.i
-
-The strategy for borrowing: first from financing, then from equity.  For modelling purposes, record excess borrowing as a debt_overage.  
-
-debt_loan_available = loan_limit - loan_balance
-abs_free_cashflow_period = abs( free_cashflow_period.i )  -- is cash required to offset debt when free_cashflow_period.i < 0
-cash_required = abs_free_cashflow_period.i * ( free_cashflow_period.i < 0 )
-debt_payout_needed_q = ( free_cashflow_period.i < 0 ) && ( debt_loan_available.i > 0 )
-debt_payout_loan = debt_payout_needed_q.i * ( ( abs_free_cashflow_period.i  <= debt_loan_available.i ) * abs_free_cashflow_period.i + ( abs_free_cashflow_period.i > debt_loan_available.i ) * debt_loan_available.i )
-loan_balance = loan_balance + debt_payout_loan.i
-
-cash_required = cash_required.i - debt_payout_loan.i  -- remaining cash required
-equity_debt_available = equity_limit - equity_debt_balance
-equity_debt_payout_needed_q =  ( cash_required.i > 0 ) && ( equity_debt_available.i > 0 )
-equity_debt_payout = equity_debt_payout_needed_q.i * ( ( cash_required.i <= equity_debt_available ) * cash_required.i + ( cash_required.i > equity_debt_available.i ) * equity_debt_available.i )
-equity_debt_balance = equity_debt_balance + equity_debt_payout.i
-cash_required = cash_required.i - equity_debt_payout.i
-
-other_debt_payout_needed_q =  ( cash_required.i > 0 ) 
-other_debt_payout = cash_required.i * other_debt_payout_needed_q.i
-other_debt_balance = other_debt_balance + other_debt_payout.i
-cash_required = 0 
-
-expense_deductable_period = expense_operations.i -- inflows are positive, outflows negative
-net_taxable = income_taxable_period.i - expense_deductable_period.i
-
-depreciation_period = producing.i * acc_fin::list_index depreciation_annual year.i ; * depreciation_basis / periods_per_year
-EBT_period = net_taxable.i - depreciation_period.i -- includes depreciation calculation
-tax_period = ( EBT_period.i > 0 ) * EBT_period.i * tax_combined_rate
-incentives_period = ( period.i == 1 ) * equity_investment_initial  + ( period.i == 3 ) * incentive_us_itc
-
--- loan payments do not happen when there is no cash to pay the loan
-loan_payment_period = debt_payout_needed_q.i * ( loan_balance.i > loan_payment ) * loan_payment + ( loan_balance.i > 0 && loan_balance.i < loan_payment ) * loan_balance.i
-loan_interest_period = loan_balance.i * loan_interest_rate_period
+ -- cashflow and finance calculations -- inflows are positive, outflows negative
+operating_costs = production_cost.i + direct_labor_cost.i + direct_labor_cost_var.i + land_use_oper_cost.i + commissions_pmnt.i -- precashflow!c7 + c12
+gross_margin = revenues.i - operating_costs.i  -- precashflow!c8
+EBITDA = gross_margin.i - g_and_a.i - mgt_fees.i -- earnings before interest, taxes, depreciation, amortization  precashflow!c11
+net_taxable = EBITDA.i  -- cashflow!rc13 = rc9 + rc10 + rc11 - rc12, rc10 and rc11 are taxable incentives and in/outflows ie not used 
+depreciation = producing.i * acc_fin::list_index depreciation_annual year.i ; * depreciation_basis / periods_per_year -- cashflow!rc15  (rc 14 is acc_fin::list_index depreciation_annual )
+EBT = net_taxable.i - depreciation.i -- includes depreciation calculation -- cashflow!rc16
+tax = ( EBT.i > 0 ) * EBT.i * tax_combined_rate -- cashflow!rc17
 
 
-equity_interest_period = equity_debt_balance.i * equity_interest_rate_period
-cost_of_finance_period = loan_interest_period * ( 1 - tax_combined_rate )
-cost_of_equity_debt_period = equity_interest_period * ( 1 - tax_combined_rate )
-cost_of_debt_period = cost_of_finance_period.i + cost_of_equity_debt_period.i
+loan_interest = accum_debt_financing * loan_interest_rate  --  cannot compound interest for capital budgeting. precashflow!c19 and loan!c7 
+loan_simple_interest = loan_balance * loan_interest_rate
+loan_payoff = loan_balance + loan_interest.i -- loan!c9
+equity_debt_interest = accum_equity_debt_financing * equity_discount_rate -- precashflow!c25
+equity_debt_simple_interest = equity_debt_balance * equity_discount_rate
+cost_of_debt = loan_interest.i * ( 1. - tax_combined_rate )
+cost_of_equity_debt = equity_debt_interest.i * ( 1. - tax_combined_rate )
+cost_of_debt_accum = cost_of_debt_accum + cost_of_debt.i
+cost_of_equity_and_debt = cost_of_debt.i + cost_of_equity_debt.i -- precashflow!c12
+net_income = EBT.i - ( tax.i + depreciation.i )     -- cashflow!rc18 = rc16 - ( rc17 + rc15)
+incentives_nontaxable = ( period.i == 1 ) * equity_investment_initial  + ( period.i == 3 ) * incentive_us_itc -- cashflow!rc19
+other_flows_nontaxable = 0 - cost_of_equity_and_debt.i -- cashflow!rc20
 
+free_cashflow = EBITDA.i - capital_expense.i - cost_of_equity_and_debt.i - tax.i -- use this for capital budgeting calculations (NV)
+free_cashflow_red = ( free_cashflow.i < 0 ) * -1 * free_cashflow.i
+net_cashflow_preTax = net_taxable.i + incentives_nontaxable.i + other_flows_nontaxable.i -- cashflow!rc21 = rc13 + rc19 + rc20
+net_cashflow_after_tax = net_cashflow_preTax.i - tax.i -- cashflow!rc22 = rc13 + rc19 + rc20 - rc17
+net_cashflow_after_tax_accum = net_cashflow_after_tax_accum + net_cashflow_after_tax.i -- cashflow!rc23 = rc22 + r-1c
 
-flows_non_taxable_period = cost_of_equity_debt_period.i + cost_of_debt_period.i  
+debt_fin_avail = debt_fin_avail - debt_payout
+debt_fin_plenty_q = debt_fin_avail.i > free_cashflow_red.i
+debt_payout = ( debt_fin_avail.i > 0 && free_cashflow_red.i > 0 ) * ( debt_fin_plenty_q.i * free_cashflow_red.i + ( debt_fin_plenty_q.i == 0 ) * debt_fin_avail.i )
 
-net_cashflow_pre_tax = net_taxable.i + incentives_period.i + flows_non_taxable_period.i
-net_cashflow_after_tax = net_cashflow_pre_tax.i - tax_period.i
+pay_loan_q = producing.i -- loan payments occur when production begins
+loan_payment = pay_loan_q.i * ( ( loan_balance > loan_payment ) * loan_payment + ( loan_balance > 0 && loan_balance < loan_payment ) * loan_balance )
+loan_payment_principal = loan_payment.i - loan_interest.i  
+loan_payment_principal = f::max loan_payment_principal.i 0 ;   -- cashflow!rc25  
+accum_debt_financing = accum_debt_financing + debt_payout.i - loan_payment_principal.i -- precashflow!c20
 
-loan_payment_principal_period = loan_payment_period.i - loan_interest_period.i
-loan_payment_principal_period = f::max loan_payment_principal_period.i 0 ;
+net_cashflow_at_gt_lpp_q = net_cashflow_after_tax.i >= loan_payment_principal.i
+net_cashflow_for_loan_principal = ( net_cashflow_after_tax.i > 0 ) * ( net_cashflow_at_gt_lpp_q.i * loan_payment_principal.i + ( net_cashflow_at_gt_lpp_q.i == 0 ) * net_cashflow_after_tax.i )   --  amount to apply to loan principal, cashflow!rc26
+cashflow_after_debt_payment = net_cashflow_after_tax.i - net_cashflow_for_loan_principal.i -- cashflow!rc27 = rc22 - rc26    Should this be cashflow_after_debt_payout?
 
-free_cashflow_available = net_cashflow_after_tax.i - loan_payment_principal_period.i -- after debt payment
-free_cashflow_gt_equity_debt = ( free_cashflow_available.i > equity_debt_balance.i ) 
-equity_payment_period = ( free_cashflow_gt_equity_debt.i == 0 ) * free_cashflow_available.i + ( free_cashflow_gt_equity_debt.i ) * equity_debt_balance.i
+cashflow_after_debt_payout = free_cashflow.i + debt_payout.i -- debt_payout is > 0 when free_cashflow.i < 0 -- precashflow!c21
+cashflow_after_debt_payout_red = ( cashflow_after_debt_payout.i < 0 ) * -1 * cashflow_after_debt_payout.i
+equity_debt_avail = equity_debt_avail - equity_debt_payout -- precashflow!c22
+equity_debt_plenty_q = equity_debt_avail.i > cashflow_after_debt_payout_red.i
+equity_debt_payout = ( equity_debt_avail.i > 0 && cashflow_after_debt_payout_red.i > 0 ) * ( equity_debt_plenty_q.i * cashflow_after_debt_payout_red.i + ( equity_debt_plenty_q.i == 0 ) * equity_debt_avail.i ) -- precashflow!c23
+equity_debt_balance_accum = equity_debt_balance_accum + cashflow_after_debt_payment.i -- cashflow!rc28 = rc27 + r-1c
+abs_equity_debt_balance_accum = abs( equity_debt_balance_accum.i )
+equity_debt_fin_plenty_q = equity_debt_avail.i > cashflow_after_debt_payout_red.i 
+equity_debt_payment_principal = ( cashflow_after_debt_payment.i > 0 ) * ( ( equity_debt_fin_plenty_q.i * cashflow_after_debt_payment.i * -1 ) + ( equity_debt_fin_plenty_q.i == 0 ) * abs_equity_debt_balance_accum.i ) -- amount to apply to equity principal, cashflow!rc29
+cashflow_after_equity_payout = cashflow_after_debt_payout.i - equity_debt_payout.i -- precashflow!c26
+accum_equity_debt_financing = accum_equity_debt_financing + equity_debt_payout.i - equity_debt_payment_principal.i -- precashflow!c24
 
-loan_balance = loan_balance.i - loan_payment_period.i + loan_interest_period.i 
-equity_debt_balance = equity_debt_balance.i - equity_payment_period.i + equity_interest_period.i
+interest_accum = interest_accum + loan_interest.i + equity_debt_interest.i -- precashflow!c27
+free_cashflow_net = cashflow_after_debt_payment.i + equity_debt_payment_principal.i -- cashflow!rc30
+
+loan_balance = loan_balance + debt_payout.i - loan_payment.i + loan_simple_interest.i -- loan!c13
+equity_debt_balance = equity_debt_balance + equity_debt_payout.i - equity_debt_payment_principal.i + equity_debt_simple_interest.i -- costOfEquity!rc13
 
 \#
 
@@ -560,10 +284,10 @@ sum_years = f::sum \$year_list ;
 }
     return $template
 }
-# example report columns: i period prev_year year next_year sys_output_period power_revenue_period capital_expense direct_labor_expense direct_labor_expense_var land_use_oper_cost commissions_pmnt expense_operations free_cashflow_period expense_deductable_period income_taxable_period net_taxable depreciation_period EBT_period tax_period incentives_period loan_payment_period equity_interest_period cost_of_finance_period cost_of_equity_debt_period cost_of_debt_period flows_non_taxable_period net_cashflow_pre_tax net_cashflow_after_tax debt_payout_loan loan_payment_principal_period loan_balance equity_debt_payout equity_payment_period equity_debt_balance other_debt_balance
+# example report columns: i period prev_year year next_year sys_output power_revenue capital_expense direct_labor_cost direct_labor_cost_var land_use_oper_cost commissions_pmnt operations_cost free_cashflow operating_costs revenues net_taxable depreciation EBT tax incentives_nontaxable loan_payment equity_debt_interest cost_of_finance cost_of_equity_debt cost_of_debt flows_non_taxable net_cashflow_pre_tax net_cashflow_after_tax debt_payout_loan loan_payment_principal loan_balance equity_debt_payout equity_payment equity_debt_balance other_debt_balance
 
 ad_proc -private acc_fin::model_compute { 
-    model 
+    model
     {number_of_iterations "0"}
     {arg1 ""}
     {arg2 ""}
@@ -591,6 +315,8 @@ ad_proc -private acc_fin::model_compute {
 
     section 3: list of variables to report with iterations
         z y
+     comment: would be nice to be able to optionally sort these by activity, ie prioritize by setting iniital priority of each to 0, and then subtracting the row number from the priority, when it's value is different than the previous row.  This way, the resultant table might imply relationships in how data changes with the flow of change.
+
     section 4: analysis calculations
        irr $y
     Each section is separated by a line with '\#'. Be sure to separate variables and operators etc by a space (or more). 
@@ -602,7 +328,17 @@ ad_proc -private acc_fin::model_compute {
     
     An error in compilation returns the compiled model with error info.
 } {
+# at some point, revise the proc arguments to start with these:
+#    model_initial
+#    model_loop
+#    {model_variables_to_track ""}
+#    {model_data_analysis ""}
+#    {mode "0"}
+# to gain more predictable, consistent control with the output and 
+# less requirements for users on input
 
+# agenda:
+# 
     # COMPILE model before executing. Do not bypass this as it includes security checks.
     #  calculates friendly list of lists from model represented in shorthand
     
@@ -742,6 +478,7 @@ ad_proc -private acc_fin::model_compute {
                         # substitute var_arr($_h) for variables on right side
                         # for each string found not an array or within paraenthesis, 
                         regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
+                        regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[\.][i][ ]} $_calc_line { $\1_arr($_i) } _calc_line
                         # do this twice to catch stragglers since spaces may be delimiters for both sides
                         regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[ ]} $_calc_line { $\1_arr($_h) } _calc_line
                         regsub -nocase -all -- {[ ]([a-z][a-z0-9_]*)[\.][i][ ]} $_calc_line { $\1_arr($_i) } _calc_line
@@ -825,12 +562,30 @@ ad_proc -private acc_fin::model_compute {
     }
 
     # set initital conditions
+
+    # carry previous loop variable values forward to current iteration automatically?
+    set interation_variables_preset 1
+
     set _model0 [lindex $_model_sections_list 0]
+    # setup model initial conditions
+
+# stopped.. make a list that identifies variables in the constants ( and any problems, such as dependencies)
+# make a list and array that identifies variables in the loop, including orphan and missing ones.
+#   the array(variable_name) contains dependencies, can be used with variable list to identify problems before compute.
+#  make an api-doc / wiki kind of interface that keeps revisions of each saved page. a page is ethier constants, loop, or report, or output.  
+# outputs are associated with specific revision of constant and loop (for caching purposes).
+#
+
+
     foreach _line $_model0 {
-         eval $_line
+        if { [catch { eval $_line } result_msg] } {
+            ns_log Warning "model_compute ref:862, bad line: $_line \n ${result_msg}"
+        } 
     }
 
     set _model1 [lindex $_model_sections_list 1]
+    # setup iterations. We need the next section to know which variables to track.
+
     # If default_arr(0) exists and {var}_arr(0) does not exist, set {var}_arr(0) to $default_arr(0)
     # this is a quick way to set a default value for all variables  instead of explicitly naming all of the variables.
 
@@ -839,16 +594,18 @@ ad_proc -private acc_fin::model_compute {
         set _dependent_var_fragment_list [split $_model1 {\(} ]
         foreach _section_fragment $_dependent_var_fragment_list {
             if { [regexp -nocase -- {[\$ ]([a-z][a-z0-9_]+)[_][a][r][r]$} $_section_fragment _scratch _dependent_variable] } {
-
                 if { ![info exists ${_dependent_variable}_arr(0) ] } {
                     set ${_dependent_variable}_arr(0) $default_arr(0)
                 }
             }
         }
     }
-        
+    
     set _model2 [lindex $_model_sections_list 2]
-    # initial conditions, h = -1, i = 0
+    # get list of user variables to track
+    # then iterate through _model1 compilation
+
+    # iteration initial conditions, h = -1, i = 0
     set timestamp [clock clicks -milliseconds]
     set timestamp_arr(0) $timestamp
     set dt_arr(0) 0
@@ -866,7 +623,9 @@ ad_proc -private acc_fin::model_compute {
         set i_arr($_i) $i
 
         foreach _line $_model1 {
-            eval $_line
+            if { [catch { eval $_line } result_msg] } {
+                ns_log Warning "model_compute ref:905, bad line: $_line \n ${result_msg}"
+            } 
         }
 
         # After calculations, carry all remaining user defined constants forward.
@@ -874,6 +633,11 @@ ad_proc -private acc_fin::model_compute {
         # but then calculations that require current iteration values but reference previous iteration 
         # values (ie reference varname instead of varname.i) will be more difficult to identify, because
         # references to last iteration values would not error -- ie current values would have last iteration's values.
+
+        # actually, let's identify these as a warning, and go ahead and automatically set the new values to old values
+        # we can make this a coded option, in case we need original behavior again later.
+
+
         foreach _variable_name $_user_def_var_names_list {
             if { ![info exists ${_variable_name}_arr($_i)] } {
                 set ${_variable_name}_arr($_i) [set ${_variable_name}_arr($_h)]

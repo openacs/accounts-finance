@@ -8,7 +8,7 @@ ad_library {
 namespace eval acc_fin {}
 
 
-ad_proc -private acc_fin::npv { 
+ad_proc -public acc_fin::npv { 
     net_period_list 
     discount_rates
     {intervals_per_year 1}
@@ -46,7 +46,7 @@ ad_proc -private acc_fin::npv {
      return $np_sum
  }
 
-ad_proc -private acc_fin::fvsimple { 
+ad_proc -public acc_fin::fvsimple { 
     net_period_list 
     annual_interest_rate
     {intervals_per_year 1}
@@ -70,7 +70,7 @@ ad_proc -private acc_fin::fvsimple {
      return $fv_sum
  }
 
-ad_proc -private acc_fin::discount_npv_curve { 
+ad_proc -public acc_fin::discount_npv_curve { 
     net_period_list
     {discounts ""}
     {intervals_per_year 1}
@@ -97,7 +97,7 @@ ad_proc -private acc_fin::discount_npv_curve {
      return $npv_curve_list
  }
 
-ad_proc -private acc_fin::irr { 
+ad_proc -public acc_fin::irr { 
     net_period_list 
     {intervals_per_year 1}
  } {
@@ -232,7 +232,7 @@ ad_proc -private acc_fin::irr {
      return $irr_list
  }
 
-ad_proc -private acc_fin::mirr { 
+ad_proc -public acc_fin::mirr { 
     period_cf_list 
     finance_rate
     re_invest_rate
@@ -259,7 +259,7 @@ ad_proc -private acc_fin::mirr {
      return $mirr
  }
 
-ad_proc -private acc_fin::loan_payment { 
+ad_proc -public acc_fin::loan_payment { 
     principal
     annual_interest_rate
     intervals_per_year
@@ -274,7 +274,7 @@ ad_proc -private acc_fin::loan_payment {
      return $regular_payment
  }
 
-ad_proc -private acc_fin::loan_apr { 
+ad_proc -public acc_fin::loan_apr { 
     annual_interest_rate
     intervals_per_year
  } {
@@ -286,7 +286,7 @@ ad_proc -private acc_fin::loan_apr {
      return $apr
  }
 
-ad_proc -private acc_fin::compound_interest { 
+ad_proc -public acc_fin::compound_interest { 
     principal
     annual_interest_rate
     intervals_per_year
@@ -299,7 +299,7 @@ ad_proc -private acc_fin::compound_interest {
      return $principal_and_interest
  }
 
-ad_proc -private acc_fin::loan_model { 
+ad_proc -public acc_fin::loan_model { 
     principal
     annual_interest_rate
     intervals_per_year
@@ -391,7 +391,7 @@ ad_proc -private acc_fin::loan_model {
      return $query_report_list
  }
 
-ad_proc -private acc_fin::depreciation_schedule { 
+ad_proc -public acc_fin::depreciation_schedule { 
     depreciation_type
     original_cost
     {scrap_value ""}
@@ -515,3 +515,47 @@ ad_proc -private acc_fin::depreciation_schedule {
     return $depreciation_list
 }
 
+
+ad_proc -public qaf_fp {
+    number
+} {
+    returns a floating point version a number, if the number is an integer (no decimal point).
+    tcl math can truncate a floating point in certain cases, such as when the divisor is an integer.
+    Use double() instead when referencing a value in an expr.
+} {
+    if { [string first "." $number] < 0 } {
+      #  append number ".0"
+        catch { 
+            set number [expr { double( $number ) } ] 
+        } else {
+            # do nothing. $number is not a recognized number
+        }
+    }
+    return $number
+} 
+
+
+ad_proc -public qaf_sign {
+    number
+} {
+    Returns the sign of the number represented as -1, 0, or 1
+} {
+    if { $number == 0 } {
+        set sign 0
+    } else {
+        set sign [expr { round( $number / double( abs ( $number ) ) ) } ]
+    }
+    return $sign
+}
+
+
+ad_proc -public acc_fin::inflation_factor {
+    annual_inflation_rate
+    intervals_per_year
+    year
+} {
+    Returns the factor to apply to a value to adjust for inflation.
+    Assumes inflationary factors occur once per year at end of year.
+} {
+    set inflationary_factor [expr { pow ( 1. + $annual_inflation_rate / double($intervals_per_year) , $year - 1. ) } ]
+}
