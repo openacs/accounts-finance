@@ -25,6 +25,8 @@ CREATE TABLE qaf_case (
     model_output_id int,
     iterations_requested int,
     iterations_completed int,
+    instance_id integer,
+        -- object_id of mounted instance (context_id)
     user_id integer,
     time_created timestamptz,
     last_modified timestamptz,
