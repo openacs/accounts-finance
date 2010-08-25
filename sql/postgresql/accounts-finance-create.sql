@@ -4,8 +4,8 @@
 -- @cvs-id
 --
 
-CREATE SEQUENCE qaf_id start 10000;
-SELECT nextval ('qaf_id');
+CREATE SEQUENCE qaf_id_seq start 10000;
+SELECT nextval ('qaf_id_seq');
 
 -- model output is separate from case, even though it is one-to-one
 -- for easier abstractions of output without associating case for 
@@ -14,7 +14,7 @@ SELECT nextval ('qaf_id');
 -- think calculator wiki with revisions
 
 CREATE TABLE qaf_file (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),  
+    id integer primary key,  
     title varchar(60)
 );
 
@@ -32,7 +32,7 @@ CREATE TABLE qaf_case_log (
 
 
 CREATE TABLE qaf_initial_conditions (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),  
+    id integer primary key,  
     code varchar(30),
     title varchar(30),
     user_id integer not null,
@@ -42,7 +42,7 @@ CREATE TABLE qaf_initial_conditions (
 );
 
 CREATE TABLE qaf_model (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),  
+    id integer primary key,  
     code varchar(30),
     title varchar(30),
     user_id integer not null,
@@ -54,7 +54,7 @@ CREATE TABLE qaf_model (
 
 
 CREATE TABLE qaf_log_points (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),  
+    id integer primary key,  
     code varchar(30),
     title varchar(30),
     user_id integer not null,
@@ -64,7 +64,7 @@ CREATE TABLE qaf_log_points (
 );
 
 CREATE TABLE qaf_post_calcs (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),  
+    id integer primary key,  
     log_id integer,
         -- id of qaf_log_point associated with process
     code varchar(30),
@@ -77,7 +77,7 @@ CREATE TABLE qaf_post_calcs (
 
 
 CREATE TABLE qaf_case (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),  
+    id integer primary key,  
     file_id integer,  
     -- file_id does not change when case_id changes
     code varchar(30),
@@ -106,7 +106,7 @@ CREATE TABLE qaf_case (
 -- until we can reference a spreadsheet table, and
 -- insert there.
 CREATE TABLE qaf_log (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),
+    id integer primary key,
     code varchar(30),
     title varchar(30),
     user_id integer not null,
@@ -124,7 +124,7 @@ CREATE TABLE qaf_log (
 -- post_calc_variables can be filtered when aggregated into
 -- another case using log_points
 CREATE TABLE qaf_post_calc_log (
-    id integer primary key DEFAULT nextval ( 'qaf_id' ),
+    id integer primary key,
     code varchar(30),
     title varchar(30),
     user_id integer not null,

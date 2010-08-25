@@ -25,4 +25,4 @@ DROP TABLE qaf_post_calcs;
 DROP TABLE qaf_post_calc_log;
 DROP TABLE qaf_log;
 
-DROP SEQUENCE qaf_id;
+DROP SEQUENCE qaf_id_seq;
