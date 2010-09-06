@@ -193,6 +193,63 @@ ad_proc -public qaf_tcl_list_of_lists_to_html_table {
 } 
 
 
+ad_proc -public qaf_model_output_to_qss_list {
+    tcl_list_of_lists
+} {
+    returns a table that is in a list_of_lists format usable by qss_*  spreadsheets
+} {
+    set columns_count [llength $tcl_list_of_lists]
+    set column_number 0
+    set rows_count 0
+
+    foreach column_list $tcl_list_of_lists {
+        # determine table's row size by examining row size for each column
+        set row_count($column_number) [llength $column_list]
+        set row $first_are_titles
+        set row_prev [lindex $column_list $first_are_titles]
+
+        set is_constant 1
+
+        while { $row < $row_count($column_number) && $is_constant } {
+            set row_now [lindex $column_list $row]
+            # examine the data of each column's row, if constant, maybe display as a constant.
+            set is_constant [expr { $is_constant && ( $row_prev == $row_now ) } ]
+            set row_prev $row_now
+            incr row
+        }
+        # title_row_count = the number of rows dedicated to the title, 1 row for spreadsheets
+        set title_row_count [expr { $first_are_titles + 1 } ]
+        set true_column($column_number) [expr { !$is_constant } ]
+        set rows_count [expr { [f::max $rows_count $row_count($column_number) ] } ]
+        incr column_number
+    }
+    # rows_count now contains max rows
+    set table_list [list ]
+    if { !$first_are_titles } {
+        # qss spreadsheet requires first row to be column titles
+        return $table_list
+    }
+
+    for {set row_index 0} { $row_index < $rows_count } { incr row_index 1 } {
+        set row_list [list ]
+        # process row
+        for {set column_index 0} { $column_index < $columns_count } { incr column_index 1 } {
+            if { $true_column($column_index) } {
+                # process this column / cell
+                set cell_value [lindex [lindex $tcl_list_of_lists $column_index ] $row_index]
+            } else {
+                set cell_value [lindex [lindex $tcl_list_of_lists $column_index ] 1]
+            }
+            lappend row_list $cell_value
+        }
+        append table_list $row_list
+    } 
+    # next row
+    
+    return $table_list
+} 
+
+
 ad_proc -public acc_fin::list_set {
     list_of_values
     {delimiter " "}
@@ -318,6 +375,33 @@ ad_proc -public acc_fin::list_summary_indexes {
        lappend indexes_unique_list 0
     }
     return $indexes_unique_list
+}
+
+ad_proc -public acc_fin::compress_eq {
+    func
+} {
+    Returns an equation compressed (without spaces). No other substitutions are made.
+} {
+    regsub -all -- { } $func {} func2
+    return $func2
+}
+
+ad_proc -public acc_fin::de_compress_eq {
+    func
+} {
+    Returns an equation uncompressed (with spaces). Each comma is converted to a space. A semicolon is converted to a close bracket/
+} {
+proc qaf_decompress_eq { func } {
+    regsub -all -- {;} $func {\]} func
+    regsub -all -- {,} $func { } func
+    regsub -all -- {([\>\<\/\*\)])} $func { \1 } func
+    regsub -all -- {([\+\-])([^0-9.])} $func { \1 \2} func
+    regsub -all -- {([^a-zA-Z])[\(]} $func {\1 ( } func
+    regsub -all -- {[\&][\&]} $func { \&\& } func
+    regsub -all -- {([a-zA-Z0-9_\.])([\)\+\-\/\=\*])} $func {\1 \2} func
+    regsub -all -- {([\(\+\-\/\=\*])([a-zA-Z0-9_])} $func {\1 \2} func
+    regsub -all -- {[ ]+} $func { } func
+    return $func
 }
 
 
