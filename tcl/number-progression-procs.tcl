@@ -39,6 +39,7 @@ ad_proc -public qaf_harmonic_terms {
             set harmonic_number [expr { 1. / $denominator } ]
             lappend harmonic_list $harmonic_number
         }
-    }
+    } 
+    ns_log Notice "qaf_harmonic_terms: len of list [llength $harmonic_list] harmonic_list $harmonic_list"
     return $harmonic_list
 }
