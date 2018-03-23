@@ -147,7 +147,7 @@ ad_proc -private acc_fin::schedule_add {
 } {
     Adds a process to be "batched" in a process stack separate from page rendering.
 } {
-    # check proc_name against allowd ones.
+    # check proc_name against allowed ones.
     set session_package_id [ad_conn package_id]
     # We assume user has permission.. but qualify by verifying that instance_id is either user_id or package_id
     if { $instance_id eq $user_id || $instance_id eq $session_package_id } {

@@ -156,7 +156,7 @@ ad_proc -public qaf_distribution_points_create {
     {y_col "0"}
     {x_col "1"}
 } {
-    Given a distribution curve represented as a discrete, ordered set of value- probability pairs (y,x) in a list, for example: { {1 .5} { 3 .3} { 6 .1} { 12 .06} { 250 .04} }. Any extra columns are ignored. Rightmost (last) entry is highest y value; Intervals are not assumed to be equal. The sum of the probabilities should equal 1.  Returns a list of a random set of the discrete numbers that approximate the distribution.  (FUTURE IMPLEMENTATIONs: To accomodate a varying rightmost discrete number which represents a wide range of perhaps infrequent numbers, set interpolate_rightmost_p to 1 use interpolation on the rightmost discrete number.  If the discrete numbers represent a curve, set interpolate_p to 1.)
+    Given a distribution curve represented as a discrete, ordered set of value- probability pairs (y,x) in a list, for example: { {1 .5} { 3 .3} { 6 .1} { 12 .06} { 250 .04} }. Any extra columns are ignored. Rightmost (last) entry is highest y value; Intervals are not assumed to be equal. The sum of the probabilities should equal 1.  Returns a list of a random set of the discrete numbers that approximate the distribution.  (FUTURE IMPLEMENTATIONs: To accommodate a varying rightmost discrete number which represents a wide range of perhaps infrequent numbers, set interpolate_rightmost_p to 1 use interpolation on the rightmost discrete number.  If the discrete numbers represent a curve, set interpolate_p to 1.)
 } {
     set amount_p [expr { [string length $min_sum_of_outputs] > 0 } ]
     set count_p [expr { [string length $number_of_points] > 0 } ]
@@ -476,7 +476,7 @@ ad_proc -public qaf_table_column_convert {
     An existing column col_ref_to name will have an underscore and number appended. In case of error, returns an empty list. 
     Conversion only requires 2 points. Median and either max or min for both ranges. If all three points are supplied,
     separate conversion calaculations occurr for the range below med vs. above med value in
-    order to accomodate transformations of two different tail scales in statistical calculations.
+    order to accommodate transformations of two different tail scales in statistical calculations.
 } {
     ns_log Notice "qaf_table_column_convert.468: col_ref_from $col_ref_from min_point_from $min_point_from med_point_from $med_point_from max_point_from $max_point_from"
     ns_log Notice "qaf_table_column_convert.469: col_ref_to $col_ref_to min_point_to $min_point_to med_point_to $med_point_to max_point_to $max_point_to"
