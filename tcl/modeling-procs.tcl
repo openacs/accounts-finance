@@ -307,7 +307,7 @@ ad_proc -private acc_fin::model_compute {
     First list element denotes how many errors there were.
     If number_of_iterations is greater than 0, Returns a list of lists, where each list element consists of a variable name and the values that it returns after each iteration, including the initial conditions. The report calculations return the variable name and the value returned from the function evaluation.
 
-NOTE: this list_of_lists format is diffrent than the standard list_of_lists table format where the first element of the list_of_lists contains ordered variable names, followed by ordered columns of one row of data. Reason: many of the model data may have variable number of values, such as 1 or interactions_count.  Using the standard method is would be a bulky way of storing many models.
+NOTE: this list_of_lists format is different than the standard list_of_lists table format where the first element of the list_of_lists contains ordered variable names, followed by ordered columns of one row of data. Reason: many of the model data may have variable number of values, such as 1 or interactions_count.  Using the standard method is would be a bulky way of storing many models.
 
     If there are errors during compile, then subsequent list elements are the results of the model compile, useful for debugging purposes.
 

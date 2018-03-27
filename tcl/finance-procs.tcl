@@ -309,7 +309,7 @@ ad_proc -public acc_fin::loan_model {
  } {
     Provides table of common loan data for complex modeling.
     Interest is compounded per interval (period). 
-    If a list of payments are supplied, they are applied in order with first payment at end of period 1. Second payment at end of period 2 etc. and final payment is repeated until loan is paid in full or number of loan years is complete. If the last payment is zero, the balance remaining is reported as a baloon payment.
+    If a list of payments are supplied, they are applied in order with first payment at end of period 1. Second payment at end of period 2 etc. and final payment is repeated until loan is paid in full or number of loan years is complete. If the last payment is zero, the balance remaining is reported as a balloon payment.
     If no payments are supplied, a constant payment is calculated and assumed.
      Returns elements of query in list pairs of period number provided. Period 0 is before loan begins. Use "summary" to return summary accumulations. "all" to return all data as ordered list of lists; first list containing data names. 
  } {
