@@ -2975,7 +2975,7 @@ ad_proc -public acc_fin::scenario_prettify {
                     set index_eq ""
                     if { $p1_arr(index_equation) ne "" } {
                         # validate equation or set empty
-                        # only allow + - / * $, logical comparisions > < == != and numbers.  $number converts to one of the available row numbers that returns a number from in p4 
+                        # only allow + - / * $, logical comparisons > < == != and numbers.  $number converts to one of the available row numbers that returns a number from in p4 
                         regsub -nocase -all -- {[^\$\/\+\-\*\(\)\.\<\>\=\!\ 0-9]+} $p1_arr(index_equation) "" index_eq
                         # add extra spaces to help expr avoid misinterpretations, but can't assume that for negative numbers vs. minus sign
                         regsub -nocase -all -- {([\/\+\*\(\)])} $index_eq " \1 " index_eq
@@ -3494,7 +3494,7 @@ ad_proc -public acc_fin::scenario_prettify {
                 
                 # For strict critical path, create a list of lists, where 
                 # each list is a list of activity and dependencies from start to finish (aka path). 
-                # The longest duration path is the strict defintion of critical path.
+                # The longest duration path is the strict definition of critical path.
 
                 # create dependency check equations
                 ns_log Notice "acc_fin::scenario_prettify.1797: scenario '$scenario_tid' create equations for checking if dependencies are met."
