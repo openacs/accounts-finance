@@ -786,7 +786,7 @@ switch -exact -- $mode {
             
             set commissions_diff [expr { abs( $scalar_arr(commissions_pot-$i) - $scalar_arr(commissions_tot-$i) ) } ]
             if { $commissions_diff < 0 } {
-                lappend user_messages_lists "Audit note: Commission pot for period $i is less than the sum of the comissions by ${commissions_diff}"
+                lappend user_messages_lists "Audit note: Commission pot for period $i is less than the sum of the commissions by ${commissions_diff}"
             }
             if { $scalar_arr(revenue-$i) != 0 } {
                 set scalar_arr(pct_of_sales-$i) "% [format "% 8.2f" [expr { $scalar_arr(commissions_tot-$i) / $scalar_arr(revenue-$i) * 100. } ] ]"

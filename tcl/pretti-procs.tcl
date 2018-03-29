@@ -2463,7 +2463,7 @@ ad_proc -private acc_fin::curve_import {
     if { $case_var_name ne "" } {
         upvar 1 $case_var_name case_var
     }
-    # In persuit of making curve_data
+    # In pursuit of making curve_data
     #     local curves are represented as a list of lists
     #     with each list a triplet set x, y, label, with the first row consisting of title names
 
