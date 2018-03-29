@@ -512,7 +512,7 @@ ad_proc -public acc_fin::pretti_color_chooser {
             incr c1 $row_contrast 
             # incr c0 [f::sum $color_mask_list]
         }
-        # convert rgb to hexidecimal
+        # convert rgb to hexadecimal
         set c0e1 [expr { int( $c0 / 16. ) } ]
         set c0e0 [expr { $c0 - $c0e1 * 16 } ]
         set h(0) [lindex $hex_list [f::max 0 [f::min 15 $c0e1 ]]]

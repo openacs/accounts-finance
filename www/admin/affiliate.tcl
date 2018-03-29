@@ -831,7 +831,7 @@ switch -exact -- $mode {
         set rows_max 0
         # first row of formatting is blank
         set apt_format_list [list [list ]]
-        # setup formating for these columns
+        # setup formatting for these columns
         set column_formats_list [list [list align right]]
         # add columns for each period
         foreach i $intervals_list {
