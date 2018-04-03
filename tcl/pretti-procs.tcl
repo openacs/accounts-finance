@@ -1294,7 +1294,7 @@ ad_proc -private acc_fin::pretti_columns_list {
             # p2 Task Network
             #      activity_ref           reference for an activity, a unique task id, using "activity" to differentiate between table_id's tid 
             #                             An activity reference is essential a function as in f() with no attributes,
-            #                             However, there is room to grow this by extending a function to include explicitly set paramemters
+            #                             However, there is room to grow this by extending a function to include explicitly set parameters
             #                             within the function, similar to how app-model handles functions aka vectors
             #                             The multiple of an activity is respresented by a whole number followed by an "*" 
             #                             with no spaces between (when spaces are used as an activity delimiter), or
