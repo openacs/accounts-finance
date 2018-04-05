@@ -38,7 +38,7 @@ ad_proc -public acc_fin::logistic_curve {
     t
 } {
     The logistic function is a population growth curve. See http://en.wikipedia.org/wiki/Logistic_curve
-    Essentialy, this goes from 0.000 to 0.9999 between t = -10 to 10 with 4 significant digits.
+    Essentially, this goes from 0.000 to 0.9999 between t = -10 to 10 with 4 significant digits.
 } {
     # p(t) = 1 / ( 1 + pow(e,-t) ) = 1 / (1 + exp( -t)
     # P might be considered to denote a population, where e is Euler's number and the variable t a unit of time

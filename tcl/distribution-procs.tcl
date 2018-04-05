@@ -475,7 +475,7 @@ ad_proc -public qaf_table_column_convert {
     Default values convert from Celsius to Fahrenheit. Creates a new column.
     An existing column col_ref_to name will have an underscore and number appended. In case of error, returns an empty list. 
     Conversion only requires 2 points. Median and either max or min for both ranges. If all three points are supplied,
-    separate conversion calaculations occurr for the range below med vs. above med value in
+    separate conversion calaculations occur for the range below med vs. above med value in
     order to accommodate transformations of two different tail scales in statistical calculations.
 } {
     ns_log Notice "qaf_table_column_convert.468: col_ref_from $col_ref_from min_point_from $min_point_from med_point_from $med_point_from max_point_from $max_point_from"

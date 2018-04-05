@@ -55,7 +55,7 @@ ad_proc -private acc_fin::pretti_curve_time_multiply {
     #      max_overlap_pct  (as a percentage from 0 to 1, blank = 1)
     #      max_concurrent   (as a positive integer, blank = no limit)
     #      max_run_time (as a decimal, blank = no limit)
-    #      max_tasks_per_run (as a postive integer, blank = no limit)
+    #      max_tasks_per_run (as a positive integer, blank = no limit)
 
 
     # activity curve @tcurvenum
@@ -1148,7 +1148,7 @@ ad_proc -public acc_fin::pretti_type_flag {
 } {
     #upvar $table_lists_name table_lists
     # page flags as pretti_types:
-    #  p in positon 1 = PRETTI app specific
+    #  p in position 1 = PRETTI app specific
     #  p1  scenario
     #  p2  task network (unique tasks and their dependencies)
     #  p3  task types (can also have dependencies)
